@@ -1,10 +1,10 @@
 """Crypto transaction analysis API router.
 
 Endpoints:
-- POST /api/crypto/analyze        — upload CSV/JSON/XLSX file and run full pipeline
-- GET  /api/crypto/detail         — get saved analysis detail for project
-- GET  /api/crypto/report         — generate HTML report for project
-- GET  /api/crypto/llm-stream     — SSE streaming LLM narrative analysis
+- POST /api/crypto/analyze        - upload CSV/JSON/XLSX file and run full pipeline
+- GET  /api/crypto/detail         - get saved analysis detail for project
+- GET  /api/crypto/report         - generate HTML report for project
+- GET  /api/crypto/llm-stream     - SSE streaming LLM narrative analysis
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ async def crypto_analyze(
 
         if not result.get("ok"):
             errors = result.get("errors", ["Nieznany błąd parsowania"])
-            _app_log(f"[Crypto] Parse FAILED: {filename} — {'; '.join(errors)}")
+            _app_log(f"[Crypto] Parse FAILED: {filename} - {'; '.join(errors)}")
             log.warning("Crypto parse failed: file=%s errors=%s", filename, errors)
             return JSONResponse({
                 "status": "error",
@@ -116,7 +116,7 @@ async def crypto_analyze(
         alerts_count = len(result.get('alerts', []))
 
         _app_log(
-            f"[Crypto] Done: {filename} — {source}/{chain}, "
+            f"[Crypto] Done: {filename} - {source}/{chain}, "
             f"{tx_count} txs, {wallets} wallets, "
             f"risk={risk:.1f}/100, alerts={alerts_count}, "
             f"{elapsed:.1f}s"
@@ -556,7 +556,7 @@ async def crypto_report(
                 headers={"Content-Disposition": f"attachment; filename=crypto_report.txt"},
             )
 
-    # Default: HTML — download as file
+    # Default: HTML - download as file
     html = _build_crypto_report_html(result)
     return StreamingResponse(
         iter([html.encode("utf-8")]),
@@ -581,7 +581,7 @@ _TX_TYPE_DESCRIPTIONS: Dict[str, str] = {
     "buy": "Zakup kryptowaluty za inną walutę (fiat lub krypto)",
     "sell": "Sprzedaż kryptowaluty za inną walutę (fiat lub krypto)",
     "swap": "Wymiana jednej kryptowaluty na inną bezpośrednio",
-    "trade": "Transakcja handlowa — kupno lub sprzedaż na rynku giełdowym",
+    "trade": "Transakcja handlowa - kupno lub sprzedaż na rynku giełdowym",
     "transfer": "Przeniesienie środków między własnymi kontami/portfelami na giełdzie",
     "send": "Wysłanie środków do innego użytkownika lub na zewnętrzny adres",
     "receive": "Otrzymanie środków od innego użytkownika lub z zewnętrznego adresu",
@@ -589,25 +589,25 @@ _TX_TYPE_DESCRIPTIONS: Dict[str, str] = {
     "staking_reward": "Nagroda otrzymana za udział w stakingu (oprocentowanie krypto)",
     "learn_reward": "Nagroda za ukończenie kursu edukacyjnego na platformie",
     "unstaking": "Odblokowanie wcześniej zablokowanych środków ze stakingu",
-    "earn": "Program oszczędnościowy/inwestycyjny — odsetki od zdeponowanych środków",
-    "distribution": "Dystrybucja tokenów — airdrop, nagroda lub podział zysku",
+    "earn": "Program oszczędnościowy/inwestycyjny - odsetki od zdeponowanych środków",
+    "distribution": "Dystrybucja tokenów - airdrop, nagroda lub podział zysku",
     "airdrop": "Darmowe tokeny otrzymane w ramach promocji lub dystrybucji projektu",
     "fee": "Opłata transakcyjna pobrana przez giełdę lub sieć blockchain",
     "commission": "Prowizja pobrana przez giełdę za wykonanie transakcji",
     "funding": "Opłata za utrzymanie pozycji futures/margin (funding rate)",
-    "futures": "Transakcja na kontrakcie terminowym (futures) — instrumenty pochodne",
+    "futures": "Transakcja na kontrakcie terminowym (futures) - instrumenty pochodne",
     "margin": "Transakcja z dźwignią finansową (pożyczone środki)",
     "liquidation": "Przymusowe zamknięcie pozycji z powodu niewystarczającego zabezpieczenia",
     "convert": "Konwersja jednej kryptowaluty na inną po aktualnym kursie",
-    "p2p": "Transakcja peer-to-peer — bezpośrednia wymiana między użytkownikami",
-    "otc": "Transakcja OTC (Over-The-Counter) — poza rynkiem giełdowym, zwykle duże kwoty",
-    "nft": "Transakcja związana z NFT (Non-Fungible Token) — unikalne tokeny cyfrowe",
+    "p2p": "Transakcja peer-to-peer - bezpośrednia wymiana między użytkownikami",
+    "otc": "Transakcja OTC (Over-The-Counter) - poza rynkiem giełdowym, zwykle duże kwoty",
+    "nft": "Transakcja związana z NFT (Non-Fungible Token) - unikalne tokeny cyfrowe",
     "mint": "Utworzenie nowego tokena lub NFT na blockchainie",
     "burn": "Trwałe zniszczenie/usunięcie tokenów z obiegu (zmniejszenie podaży)",
     "bridge": "Transfer kryptowaluty między różnymi blockchainami przez most (bridge)",
     "wrap": "Zamiana tokena na jego opakowaną wersję kompatybilną z innym blockchainem",
     "unwrap": "Zamiana opakowanego tokena z powrotem na oryginał",
-    "loan": "Pożyczka kryptowalutowa — wypożyczenie lub zaciągnięcie pożyczki",
+    "loan": "Pożyczka kryptowalutowa - wypożyczenie lub zaciągnięcie pożyczki",
     "repayment": "Spłata pożyczki kryptowalutowej",
     "collateral": "Środki zablokowane jako zabezpieczenie pożyczki lub pozycji margin",
     "savings": "Środki ulokowane w programie oszczędnościowym giełdy",
@@ -615,11 +615,11 @@ _TX_TYPE_DESCRIPTIONS: Dict[str, str] = {
     "referral": "Premia/nagroda za polecenie giełdy innym użytkownikom",
     "cashback": "Zwrot części opłaty transakcyjnej lub zakupu",
     "dust_conversion": "Zamiana niewielkich resztek tokenów (dust) na jedną kryptowalutę",
-    "incoming": "Transakcja przychodząca — środki otrzymane na portfel",
-    "outgoing": "Transakcja wychodząca — środki wysłane z portfela",
+    "incoming": "Transakcja przychodząca - środki otrzymane na portfel",
+    "outgoing": "Transakcja wychodząca - środki wysłane z portfela",
     "contract_call": "Wywołanie smart kontraktu na blockchainie (np. interakcja z DeFi)",
     "approval": "Udzielenie zgody smart kontraktowi na zarządzanie tokenami",
-    "self_transfer": "Transfer do samego siebie — przeniesienie między własnymi adresami",
+    "self_transfer": "Transfer do samego siebie - przeniesienie między własnymi adresami",
 }
 
 
@@ -627,16 +627,16 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     """Build a standalone HTML report with logical section ordering.
 
     Sections:
-      I.   Identyfikacja — account info, user IDs
-      II.  Podsumowanie ogólne — stats, tokens, date range
-      III. Profil zachowania — user behavior profiling
-      IV.  Ocena ryzyka AML — risk score, reasons, alerts
-      V.   Portfel tokenów — token breakdown
-      VI.  Kontrahenci i transfery — counterparties, pay C2C, phones
-      VII. Adresy on-chain — external src/dst, wallets, deposit addresses
-      VIII.Analiza kryminalistyczna — pass-through, privacy coins, mining
-      IX.  Bezpieczeństwo konta — access logs, devices, card timeline
-      X.   Transakcje — full transaction list
+      I.   Identyfikacja - account info, user IDs
+      II.  Podsumowanie ogólne - stats, tokens, date range
+      III. Profil zachowania - user behavior profiling
+      IV.  Ocena ryzyka AML - risk score, reasons, alerts
+      V.   Portfel tokenów - token breakdown
+      VI.  Kontrahenci i transfery - counterparties, pay C2C, phones
+      VII. Adresy on-chain - external src/dst, wallets, deposit addresses
+      VIII.Analiza kryminalistyczna - pass-through, privacy coins, mining
+      IX.  Bezpieczeństwo konta - access logs, devices, card timeline
+      X.   Transakcje - full transaction list
     """
     from datetime import datetime
 
@@ -663,6 +663,151 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 
     sn = 0  # section number
     sections = []
+
+    # Section descriptions for analysts
+    _SEC_DESC = {
+        "podsumowanie": (
+            "Podstawowe statystyki analizowanego konta kryptowalutowego. Sekcja zawiera informacje o łącznej liczbie transakcji, "
+            "zakresie dat aktywności, listę obsługiwanych tokenów (kryptowalut) oraz źródło danych (np. nazwa giełdy, eksport z blockchainu). "
+            "Te dane pozwalają szybko ocenić skalę aktywności - czy mamy do czynienia z kontem o kilku transakcjach, "
+            "czy z intensywnie używanym rachunkiem z tysiącami operacji rozłożonych na lata."
+        ),
+        "profil": (
+            "Na podstawie wzorców transakcji system automatycznie rozpoznaje typ użytkownika - np. inwestor długoterminowy (kupuje i trzyma), "
+            "aktywny trader (częste kupna/sprzedaże), arbitrażysta (wykorzystuje różnice cenowe między giełdami) czy podmiot tranzytowy "
+            "(środki szybko przechodzą przez konto). Profil jest wyznaczany algorytmicznie na podstawie częstotliwości transakcji, "
+            "czasu trzymania tokenów, rodzajów operacji i ich wolumenów. Wynik zawiera procentowy poziom pewności oraz listę powodów, "
+            "dla których dany profil został przypisany. Jeden użytkownik może wykazywać cechy kilku profili jednocześnie."
+        ),
+        "ryzyko": (
+            "Kluczowa sekcja z punktu widzenia przeciwdziałania praniu pieniędzy (AML - Anti-Money Laundering). "
+            "System analizuje wszystkie transakcje i przypisuje zagregowany wynik ryzyka w skali 0–100 punktów, "
+            "gdzie 0 oznacza brak podejrzanych zachowań, a 100 - bardzo wysokie ryzyko. Ocena jest budowana z wielu czynników, m.in.: "
+            "structuring (dzielenie kwot na mniejsze, aby ominąć progi raportowe), privacy coins (użycie kryptowalut utrudniających śledzenie, "
+            "np. Monero, Zcash), szybkie przeloty (środki wpływające i wypływające w ciągu godzin), kontrahenci wysokiego ryzyka "
+            "(transakcje z adresami powiązanymi z mikserami, sankcjami lub nielegalną działalnością). "
+            "Poniżej wyniku punktowego znajduje się lista konkretnych czynników, które wpłynęły na ocenę, oraz alerty wygenerowane przez silnik reguł."
+        ),
+        "portfel": (
+            "Zestawienie wszystkich kryptowalut (tokenów), które pojawiły się na analizowanym koncie. "
+            "Wpływy i wypływy to łączna wartość otrzymana i wysłana w danym tokenie; saldo netto to różnica (dodatnie = więcej otrzymano niż wysłano). "
+            "Kategoria klasyfikuje token (np. L1/infrastructure, stablecoin, payments/transfers, memecoin, privacy coin) - "
+            "pomaga ocenić charakter aktywności. Alert wskazuje poziom ryzyka tokena (NORMAL, MEDIUM, HIGH, CRITICAL); "
+            "token oznaczony jako HIGH/CRITICAL wymaga szczególnej uwagi analityka."
+        ),
+        "wykresy": (
+            "Graficzna prezentacja danych ułatwiająca szybkie wychwycenie trendów i anomalii. "
+            "Wykres salda w czasie pokazuje jak zmieniało się saldo każdego tokena na przestrzeni analizowanego okresu - "
+            "gwałtowne skoki lub spadki mogą wskazywać na duże jednorazowe wpłaty/wypłaty. "
+            "Gdy tokeny mają drastycznie różne wartości, wykres stosuje normalizację logarytmiczną (wszystkie linie skalowane procentowo). "
+            "Graf przepływu transakcji przedstawia powiązania między adresami i kontrahentami - węzły to adresy/portfele, "
+            "strzałki to kierunki przepływu środków, kolor odzwierciedla poziom ryzyka."
+        ),
+        "kontrahenci": (
+            "Lista wszystkich podmiotów, z którymi analizowane konto wymieniało środki. Kontrahenci są identyfikowani na podstawie "
+            "wewnętrznych ID użytkowników giełdy, adresów portfeli Binance Pay (C2C) oraz numerów telefonów wykrytych w danych transakcyjnych. "
+            "Dla każdego kontrahenta podana jest liczba transakcji, łączne wpływy i wypływy, używane tokeny oraz okres współpracy. "
+            "Pozwala zidentyfikować najaktywniejszych partnerów handlowych, wykryć nietypowe powiązania "
+            "(np. jeden kontrahent odpowiada za większość obrotu) i powiązać numery telefonów z konkretnymi transakcjami."
+        ),
+        "adresy": (
+            "Zestawienie adresów blockchain (ciągów znaków identyfikujących portfele w sieci) powiązanych z analizowanym kontem. "
+            "Adresy depozytowe to portfele przypisane do użytkownika na giełdzie, na które wpływają środki z zewnątrz. "
+            "Adresy zewnętrzne to portfele spoza giełdy, z których użytkownik otrzymywał środki lub na które je wysyłał. "
+            "Adresy dwukierunkowe (zarówno wpłaty jak wypłaty) mogą wskazywać na własne portfele użytkownika poza giełdą "
+            "lub na bliskie relacje handlowe."
+        ),
+        "kryminalistyczna": (
+            "Zaawansowane algorytmy wykrywania podejrzanych wzorców. "
+            "Przeloty tranzytowe (pass-through) to pary transakcji, gdzie depozyt i wypłata podobnej kwoty następują w ciągu 24 godzin - "
+            "klasyczny wzorzec konta tranzytowego, przez które środki 'przelatują' bez dłuższego zatrzymania. "
+            "Kryptowaluty prywatności (Monero, Zcash) utrudniają lub uniemożliwiają śledzenie nadawcy, odbiorcy i kwoty transakcji. "
+            "Wzorce górnicze to regularne, małe wpływy z tego samego adresu mogące wskazywać na dochody z kopania kryptowalut. "
+            "Handel z dźwignią (margin) obejmuje zlecenia margin/futures - intensywny handel lewarowany może wskazywać na spekulację wysokiego ryzyka."
+        ),
+        "bezpieczenstwo": (
+            "Dane techniczne dotyczące sposobu korzystania z konta. "
+            "Logi dostępu to historia logowań z adresami IP i statusami - wiele nieudanych prób może wskazywać na atak brute-force lub przejęcie konta. "
+            "Odciski urządzeń zawierają informacje o przeglądarkach i systemach operacyjnych - nagła zmiana urządzenia to sygnał ostrzegawczy. "
+            "Geolokalizacja pokazuje kraje logowań - logowania z wielu krajów w krótkim czasie mogą wskazywać na użycie VPN/proxy lub współdzielenie konta. "
+            "Timeline kart płatniczych prezentuje aktywność kart powiązanych z kontem."
+        ),
+        "czasowa": (
+            "Rozkład transakcji w podziale na godziny dnia (0–23) i dni tygodnia. "
+            "Aktywność automatyczna - boty handlowe działają 24/7 z równomiernym rozkładem; człowiek ma naturalną przerwę nocną. "
+            "Koordynacja - transakcje konsekwentnie realizowane w wąskim oknie czasowym mogą wskazywać na skoordynowane działania. "
+            "Nietypowe wzorce - np. wyłącznie nocna aktywność może sugerować, że rzeczywisty użytkownik jest w innej strefie czasowej."
+        ),
+        "konwersje": (
+            "Sekwencje szybkich zamian jednego tokena na drugi, np. PLN → BTC → XMR → USDT → EUR. "
+            "Wieloetapowe konwersje realizowane w krótkim czasie to klasyczna technika layeringu - "
+            "tworzenia kolejnych warstw transakcji, aby utrudnić prześledzenie pochodzenia środków."
+        ),
+        "structuring": (
+            "Structuring (smurfing) polega na dzieleniu dużej kwoty na wiele mniejszych transakcji - "
+            "często tuż poniżej progów raportowych (np. 15 000 EUR w UE, 10 000 USD w USA). "
+            "Celem jest uniknięcie automatycznego zgłoszenia transakcji do jednostki analityki finansowej. "
+            "System wykrywa grupy transakcji o zbliżonych kwotach, realizowanych w krótkim czasie, na ten sam lub powiązane konta."
+        ),
+        "wash": (
+            "Wash trading to transakcje, w których ten sam podmiot (lub podmioty powiązane) występuje jednocześnie jako kupujący i sprzedający. "
+            "Celem jest sztuczne generowanie wolumenu obrotu - np. aby token wyglądał na bardziej płynny niż jest w rzeczywistości, "
+            "lub aby wygenerować fałszywą historię handlową. "
+            "System wykrywa pary transakcji kupno↔sprzedaż tego samego tokena w krótkim czasie z podobnymi kwotami."
+        ),
+        "fiat": (
+            "Punkty styku między tradycyjnym systemem finansowym a światem kryptowalut. "
+            "On-ramp (wpłata fiat) to wpłaty z konta bankowego na giełdę; off-ramp (wypłata fiat) to wypłaty z giełdy na konto bankowe. "
+            "Duże wpłaty fiat wymagają weryfikacji źródła środków; duże wypłaty mogą wskazywać na realizację zysków lub wyprowadzanie środków. "
+            "Asymetria - np. duże wpłaty fiat bez odpowiadających wypłat krypto (lub odwrotnie) - może wskazywać na pranie pieniędzy."
+        ),
+        "p2p": (
+            "Transakcje peer-to-peer to bezpośrednia wymiana kryptowalut między użytkownikami, często z pominięciem standardowej książki zleceń giełdy. "
+            "Handel P2P jest popularny w krajach z ograniczeniami bankowymi i bywa wykorzystywany do omijania procedur KYC "
+            "(Know Your Customer - weryfikacja tożsamości) oraz AML. "
+            "Powtarzający się kontrahenci z dużymi wolumenami mogą wskazywać na niezarejestrowaną działalność wymiany walut."
+        ),
+        "velocity": (
+            "Analiza tego, jak szybko środki przechodzą przez konto. "
+            "Średni czas trzymania to ile czasu token pozostaje na koncie między wpłatą a wypłatą - "
+            "normalni użytkownicy trzymają kryptowaluty dni lub tygodnie; konta tranzytowe - minuty lub godziny. "
+            "Wskaźniki hot wallet oznaczają tokeny ze średnim czasem trzymania poniżej 1 godziny - "
+            "zachowanie typowe dla portfeli gorących giełd lub kont używanych do przepuszczania środków. "
+            "Zbliżone wartości wpłat i wypłat przy krótkim trzymaniu to silny sygnał konta tranzytowego."
+        ),
+        "fees": (
+            "Zestawienie opłat transakcyjnych (gas fees, withdrawal fees, trading fees) w podziale na tokeny. "
+            "Pozwala oszacować koszty aktywności na koncie, wykryć transakcje z nietypowo wysokimi opłatami "
+            "(celowe podnoszenie opłat może wskazywać na front-running - wyprzedzanie cudzych transakcji w bloku), "
+            "oraz zidentyfikować dominującą sieć blockchain na podstawie tokena opłat (np. ETH = Ethereum, BNB = BSC)."
+        ),
+        "sieci": (
+            "Statystyki wykorzystania różnych sieci blockchain (np. Ethereum, Binance Smart Chain, Tron, Polygon). "
+            "Dla każdej sieci podana jest liczba transakcji i wolumen. Pozwala określić, które sieci użytkownik preferuje "
+            "(np. Tron jest popularny do tanich transferów USDT), wykryć bridge'owanie - przenoszenie środków między łańcuchami, "
+            "co może utrudniać śledzenie - oraz ocenić, czy użytkownik korzysta z sieci o niższym poziomie monitoringu AML."
+        ),
+        "ext_security": (
+            "Pogłębiona analiza techniczna sesji i urządzeń. "
+            "Anomalie logowań to wykryte nietypowe wzorce dostępu (logowanie z nowego kraju, zmiana fingerprintu urządzenia). "
+            "VPN/Proxy - wykryte logowania z adresów IP znanych dostawców VPN lub sieci Tor; "
+            "ukrywanie lokalizacji samo w sobie nie jest nielegalne, ale w kontekście AML jest czynnikiem ryzyka. "
+            "Geolokalizacja kart - porównanie lokalizacji transakcji kartowych z lokalizacją logowań; "
+            "rozbieżności mogą wskazywać na kradzież tożsamości lub cloning karty."
+        ),
+        "transakcje": (
+            "Kompletna lista wszystkich transakcji - baza dowodowa dla całej analizy. "
+            "Każdy wiersz zawiera datę, typ operacji (deposit, withdrawal, trade, swap, transfer itp.), "
+            "token i kwotę, adresy nadawcy i odbiorcy, automatycznie przypisany poziom ryzyka dla tej transakcji "
+            "oraz tagi klasyfikacyjne (np. suspicious, high_value, privacy_coin). "
+            "Tabela pozwala analitykowi na ręczną weryfikację dowolnej transakcji wychwycone przez algorytmy w sekcjach powyżej."
+        ),
+    }
+
+    def _sdesc(key: str) -> str:
+        """Return HTML paragraph with section description, or empty string."""
+        txt = _SEC_DESC.get(key, "")
+        return f'<p class="section-desc">{txt}</p>' if txt else ""
 
     # ── I. Identyfikacja ──
     sn += 1
@@ -715,7 +860,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     # ── II. Podsumowanie ogólne ──
     sn += 1
     sum_rows = [
-        f"<tr><th>Okres analizy</th><td>{_resc(date_from)} — {_resc(date_to)}</td></tr>",
+        f"<tr><th>Okres analizy</th><td>{_resc(date_from)} - {_resc(date_to)}</td></tr>",
         f"<tr><th>Łączna liczba transakcji</th><td>{tx_count}</td></tr>",
         f"<tr><th>Portfele / adresy</th><td>{r.get('wallet_count', 0)}</td></tr>",
         f"<tr><th>Kontrahenci</th><td>{r.get('counterparty_count', 0)}</td></tr>",
@@ -737,7 +882,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     for cur, amt in fiat_out.items():
         sum_rows.append(f"<tr><th>Wypłaty fiat ({_resc(cur)})</th><td>{amt:,.2f}</td></tr>")
 
-    sections.append(f'<h2>{sn}. Podsumowanie ogólne</h2><table class="info-table">{"".join(sum_rows)}</table>')
+    sections.append(f'<h2>{sn}. Podsumowanie ogólne</h2>{_sdesc("podsumowanie")}<table class="info-table">{"".join(sum_rows)}</table>')
 
     # ── III. Profil zachowania ──
     bp = r.get("behavior_profile", {})
@@ -751,12 +896,12 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             if p.get("reasons"):
                 reasons = "<ul>" + "".join(f"<li>{_resc(rr)}</li>" for rr in p["reasons"]) + "</ul>"
             bc = '#22c55e' if p['score'] >= 50 else '#eab308' if p['score'] >= 30 else '#94a3b8'
-            ph += f'<div class="profile-card" style="border-left:4px solid {bc}"><strong>{_resc(p["icon"])} {_resc(p["label"])}</strong> — {p["score"]}%<div class="desc">{_resc(p["desc"])}</div>{reasons}</div>'
-        sections.append(f"<h2>{sn}. Profil zachowania użytkownika</h2>{ph}")
+            ph += f'<div class="profile-card" style="border-left:4px solid {bc}"><strong>{_resc(p["icon"])} {_resc(p["label"])}</strong> - {p["score"]}%<div class="desc">{_resc(p["desc"])}</div>{reasons}</div>'
+        sections.append(f"<h2>{sn}. Profil zachowania użytkownika</h2>{_sdesc('profil')}{ph}")
 
     # ── IV. Ocena ryzyka AML ──
     sn += 1
-    risk_html = f'<div style="font-size:18px;font-weight:bold;color:{rc};margin-bottom:12px">{risk_score:.1f}/100 — {rl}</div>'
+    risk_html = f'<div style="font-size:18px;font-weight:bold;color:{rc};margin-bottom:12px">{risk_score:.1f}/100 - {rl}</div>'
     risk_reasons = r.get("risk_reasons", [])
     if risk_reasons:
         risk_html += "<h3>Czynniki ryzyka</h3><ul>" + "".join(f"<li>{_resc(rr)}</li>" for rr in risk_reasons) + "</ul>"
@@ -764,7 +909,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
     if alerts:
         alert_items = "".join(f"<li><strong>{_resc(a.get('type', ''))}</strong>: {_resc(a.get('message', ''))}</li>" for a in alerts)
         risk_html += f"<h3>Alerty ({len(alerts)})</h3><ul>{alert_items}</ul>"
-    sections.append(f"<h2>{sn}. Ocena ryzyka AML</h2>{risk_html}")
+    sections.append(f"<h2>{sn}. Ocena ryzyka AML</h2>{_sdesc('ryzyko')}{risk_html}")
 
     # ── V. Portfel tokenów ──
     tokens = r.get("tokens", {})
@@ -794,7 +939,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                      f"<td{tooltip}><span style='color:{ac};font-weight:600;font-size:11px'>{_resc(alert)}</span></td>"
                      f"<td style='font-size:11px;color:#64748b;max-width:300px'>{desc}</td></tr>")
         sections.append(
-            f'<h2>{sn}. Portfel tokenów</h2>'
+            f'<h2>{sn}. Portfel tokenów</h2>{_sdesc("portfel")}'
             f'<table class="data-table"><thead><tr>'
             f'<th>Token</th><th>Nazwa</th><th>Kategoria</th>'
             f'<th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th>'
@@ -854,56 +999,61 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 '</script>'
             )
 
-        # Flow graph (simple SVG rendering for static report)
+        # Flow graph (Cytoscape.js - same rendering as program view)
         if has_graph:
             nodes = graph.get("nodes", [])
             edges = graph.get("edges", [])
             if nodes and edges:
-                risk_colors_map = {"critical": "#dc2626", "high": "#f97316", "medium": "#eab308", "low": "#64748b"}
-                # Layout: simple force-like placement
-                import math
-                n_nodes = len(nodes)
-                node_positions = {}
-                for idx, node in enumerate(nodes):
-                    angle = 2 * math.pi * idx / max(n_nodes, 1)
-                    cx = 400 + 280 * math.cos(angle)
-                    cy = 300 + 200 * math.sin(angle)
-                    node_positions[node["data"]["id"]] = (cx, cy)
-
-                svg_w, svg_h = 800, 600
-                svg_parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
-                             f'style="width:100%;max-width:{svg_w}px;height:auto;background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px">']
-                # Arrowhead marker
-                svg_parts.append('<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">'
-                                 '<polygon points="0 0, 8 3, 0 6" fill="#475569"/></marker></defs>')
-                # Draw edges
-                for edge in edges[:200]:
-                    ed = edge.get("data", {})
-                    src_id = ed.get("source", "")
-                    tgt_id = ed.get("target", "")
-                    if src_id in node_positions and tgt_id in node_positions:
-                        x1, y1 = node_positions[src_id]
-                        x2, y2 = node_positions[tgt_id]
-                        ec = "#ef4444" if ed.get("risk") else "#94a3b8"
-                        sw = min(3, max(0.5, (ed.get("count", 1) or 1) * 0.5))
-                        svg_parts.append(f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
-                                         f'stroke="{ec}" stroke-width="{sw}" marker-end="url(#ah)" opacity="0.6"/>')
-                # Draw nodes
+                import json as _json2
+                risk_cm = {"critical": "#dc2626", "high": "#f97316", "medium": "#eab308", "low": "#64748b"}
+                cy_elements = []
                 for node in nodes:
-                    nd = node.get("data", {})
-                    nid = nd.get("id", "")
-                    if nid in node_positions:
-                        nx, ny = node_positions[nid]
-                        nc = risk_colors_map.get(nd.get("risk_level", "low"), "#64748b")
-                        r_size = min(18, max(8, 8 + (nd.get("tx_count", 0) or 0)))
-                        label = _resc(nd.get("label", nid[:10]))
-                        svg_parts.append(f'<circle cx="{nx:.0f}" cy="{ny:.0f}" r="{r_size}" fill="{nc}" stroke="#fff" stroke-width="1.5" opacity="0.85"/>')
-                        svg_parts.append(f'<text x="{nx:.0f}" y="{ny + r_size + 12:.0f}" text-anchor="middle" '
-                                         f'font-size="9" fill="#334155">{label}</text>')
-                svg_parts.append('</svg>')
-                chart_html += f'<h3>Graf przepływu transakcji</h3>{"".join(svg_parts)}'
+                    d = node.get("data", {})
+                    nc = risk_cm.get(d.get("risk_level", "low"), "#64748b")
+                    size = max(20, min(60, 20 + (d.get("tx_count", 0) or 0) * 2))
+                    cy_elements.append({"group": "nodes", "data": {
+                        "id": d["id"], "label": d.get("label", d["id"][:10]),
+                        "color": nc, "size": size,
+                    }})
+                for edge in edges[:200]:
+                    d = edge.get("data", {})
+                    amt = d.get("amount", 0)
+                    label = d.get("token", "")
+                    if amt:
+                        label += f" {amt:,.2f}"
+                    ec = "#ef4444" if d.get("risk") else "#475569"
+                    w = max(1, min(6, d.get("count", 1) or 1))
+                    cy_elements.append({"group": "edges", "data": {
+                        "source": d["source"], "target": d["target"],
+                        "label": label, "width": w, "color": ec,
+                    }})
+                chart_html += (
+                    '<h3>Graf przepływu transakcji</h3>'
+                    '<div id="report_graph" style="width:100%;height:550px;background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px"></div>'
+                    '<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>'
+                    '<script>'
+                    f'var _gElems={_json2.dumps(cy_elements, ensure_ascii=False)};'
+                    'document.addEventListener("DOMContentLoaded",function(){'
+                    'var c=document.getElementById("report_graph");if(!c)return;'
+                    'cytoscape({container:c,elements:_gElems,'
+                    'style:['
+                    '{selector:"node",style:{"background-color":"data(color)","label":"data(label)","color":"#1e293b",'
+                    '"font-size":"10px","text-valign":"bottom","text-margin-y":4,"width":"data(size)","height":"data(size)",'
+                    '"border-width":1,"border-color":"#94a3b8"}},'
+                    '{selector:"edge",style:{"line-color":"data(color)","target-arrow-color":"data(color)",'
+                    '"target-arrow-shape":"triangle","curve-style":"bezier","width":"data(width)",'
+                    '"label":"data(label)","font-size":"8px","color":"#64748b","text-rotation":"autorotate",'
+                    '"text-margin-y":-8,"text-opacity":0.8}}'
+                    '],'
+                    'layout:{name:"cose",animate:false,nodeDimensionsIncludeLabels:true,'
+                    'nodeRepulsion:function(){return 6000;},idealEdgeLength:function(){return 120;}},'
+                    'userZoomingEnabled:false,userPanningEnabled:false'
+                    '});'
+                    '});'
+                    '</script>'
+                )
 
-        sections.append(f"<h2>{sn}. Wykresy</h2>{chart_html}")
+        sections.append(f"<h2>{sn}. Wykresy</h2>{_sdesc('wykresy')}{chart_html}")
 
     # ── next. Kontrahenci i transfery ──
     cps = bs.get("counterparties", {})
@@ -915,7 +1065,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if cps:
             rows = ""
             for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
-                period = f"{(c.get('first_seen', '') or '')[:10]} — {(c.get('last_seen', '') or '')[:10]}"
+                period = f"{(c.get('first_seen', '') or '')[:10]} - {(c.get('last_seen', '') or '')[:10]}"
                 rows += f"<tr><td><code>{_resc(uid)}</code></td><td>{c.get('tx_count', 0)}</td><td class='num'>{c.get('total_in', 0):.4f}</td><td class='num'>{c.get('total_out', 0):.4f}</td><td>{_resc(', '.join(c.get('tokens', [])))}</td><td>{_resc(', '.join(c.get('sources', [])))}</td><td style='font-size:11px'>{_resc(period)}</td></tr>"
             ct_html += f'<h3>Kontrahenci wewnętrzni Binance</h3><table class="data-table"><thead><tr><th>User ID</th><th>TX</th><th>Wpływy</th><th>Wypływy</th><th>Tokeny</th><th>Źródło</th><th>Okres</th></tr></thead><tbody>{rows}</tbody></table>'
             ct_html += f'<p>Transfery wewnętrzne: <b>{bs.get("internal_transfer_count", 0)}</b> | Depozyty zewnętrzne: <b>{bs.get("external_deposit_count", 0)}</b> | Wypłaty zewnętrzne: <b>{bs.get("external_withdrawal_count", 0)}</b></p>'
@@ -936,7 +1086,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 rows += f"<tr><td style='font-family:monospace;font-weight:600'>{_resc(p['number'])}</td><td>{_resc(p.get('country_name', ''))}</td><td>{_resc(p.get('country_iso', ''))}</td><td>{p.get('occurrences', 0)}</td><td style='font-size:11px'>{_resc(ctx_text)}</td></tr>"
             ct_html += f'<h3>Zidentyfikowane numery telefonów</h3><table class="data-table"><thead><tr><th>Numer</th><th>Kraj</th><th>ISO</th><th>Wystąpienia</th><th>Kontekst</th></tr></thead><tbody>{rows}</tbody></table>'
 
-        sections.append(f"<h2>{sn}. Kontrahenci i transfery</h2>{ct_html}")
+        sections.append(f"<h2>{sn}. Kontrahenci i transfery</h2>{_sdesc('kontrahenci')}{ct_html}")
 
     # ── VII. Adresy on-chain ──
     ext_src = fr.get("external_source_addresses", [])
@@ -997,10 +1147,10 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 display_addr = m.get("display", _key)
                 direction = "dep+wd" if m["dep_count"] > 0 and m["wd_count"] > 0 else ("dep" if m["dep_count"] > 0 else "wd")
                 dir_label = {"dep+wd": "&#x1F4E5;&#x1F4E4;", "dep": "&#x1F4E5;", "wd": "&#x1F4E4;"}[direction]
-                dc = m["dep_count"] or "—"
-                dt = f"{m['dep_total']:.4f}" if m["dep_count"] else "—"
-                wc = m["wd_count"] or "—"
-                wt = f"{m['wd_total']:.4f}" if m["wd_count"] else "—"
+                dc = m["dep_count"] or "-"
+                dt = f"{m['dep_total']:.4f}" if m["dep_count"] else "-"
+                wc = m["wd_count"] or "-"
+                wt = f"{m['wd_total']:.4f}" if m["wd_count"] else "-"
                 rows += f"<tr><td><code style='word-break:break-all'>{_resc(display_addr)}</code></td><td style='text-align:center'>{dir_label}</td><td>{dc}</td><td class='num'>{dt}</td><td>{wc}</td><td class='num'>{wt}</td><td>{_resc(', '.join(sorted(m['tokens'])))}</td><td>{_resc(', '.join(sorted(m['networks'])))}</td></tr>"
             both_count = sum(1 for _, m in sorted_addrs if m["dep_count"] > 0 and m["wd_count"] > 0)
             note = f" (w tym <b>{both_count}</b> dwukierunkowych)" if both_count else ""
@@ -1010,7 +1160,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             rows = "".join(f"<tr><td><code style='word-break:break-all'>{_resc(w['address'])}</code></td><td>{_resc(w.get('label', ''))}</td><td>{w.get('tx_count', 0)}</td><td class='num'>{w.get('total_received', 0):.4f}</td><td class='num'>{w.get('total_sent', 0):.4f}</td><td>{_resc(w.get('risk_level', ''))}</td></tr>" for w in wallets[:100])
             addr_html += f'<h3>Portfele</h3><table class="data-table"><thead><tr><th>Adres</th><th>Etykieta</th><th>TX</th><th>Otrzymane</th><th>Wysłane</th><th>Ryzyko</th></tr></thead><tbody>{rows}</tbody></table>'
 
-        sections.append(f"<h2>{sn}. Adresy on-chain</h2>{addr_html}")
+        sections.append(f"<h2>{sn}. Adresy on-chain</h2>{_sdesc('adresy')}{addr_html}")
 
     # ── VIII. Analiza kryminalistyczna ──
     pts = fr.get("pass_through_detection", [])
@@ -1056,7 +1206,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
                 mk = "".join(f"<tr><td>{_resc(m)}</td><td>{c}</td></tr>" for m, c in margin["top_markets"].items())
                 forens_html += f'<h4>Top rynki margin</h4><table class="data-table"><thead><tr><th>Rynek</th><th>Zlecenia</th></tr></thead><tbody>{mk}</tbody></table>'
 
-        sections.append(f"<h2>{sn}. Analiza kryminalistyczna</h2>{forens_html}")
+        sections.append(f"<h2>{sn}. Analiza kryminalistyczna</h2>{_sdesc('kryminalistyczna')}{forens_html}")
 
     # ── IX. Bezpieczeństwo konta ──
     al = fr.get("access_log_analysis", {})
@@ -1068,7 +1218,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         sec_html = ""
 
         if al.get("total_entries"):
-            sec_html += f'<h3>Logi dostępu</h3><p>Łącznie wpisów: <b>{al["total_entries"]}</b>, unikalne IP: <b>{al.get("unique_ips", 0)}</b>, okres: {_resc(al.get("first_login", "")[:10])} — {_resc(al.get("last_login", "")[:10])}</p>'
+            sec_html += f'<h3>Logi dostępu</h3><p>Łącznie wpisów: <b>{al["total_entries"]}</b>, unikalne IP: <b>{al.get("unique_ips", 0)}</b>, okres: {_resc(al.get("first_login", "")[:10])} - {_resc(al.get("last_login", "")[:10])}</p>'
             if al.get("foreign_login_count"):
                 sec_html += f'<p style="color:#dc2626"><b>Zagraniczne loginy: {al["foreign_login_count"]}</b> (poza {_resc(al.get("primary_country", "?"))})</p>'
             geos = al.get("geolocations", {})
@@ -1100,7 +1250,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             rows = "".join(f"<tr><td>{_resc(t.get('timestamp', '')[:16])}</td><td>{_resc(t.get('merchant', ''))}</td><td class='num'>{t.get('amount', 0):.2f}</td><td>{_resc(t.get('currency', ''))}</td><td>{_resc(t.get('status', ''))}</td></tr>" for t in card_tl)
             sec_html += f'<h3>Oś czasu transakcji kartą</h3><table class="data-table"><thead><tr><th>Data</th><th>Merchant</th><th>Kwota</th><th>Waluta</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table>'
 
-        sections.append(f"<h2>{sn}. Bezpieczeństwo konta</h2>{sec_html}")
+        sections.append(f"<h2>{sn}. Bezpieczeństwo konta</h2>{_sdesc('bezpieczenstwo')}{sec_html}")
 
     # ── X. Analiza czasowa ──
     ta = fr.get("temporal_analysis", {})
@@ -1121,7 +1271,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if dorm:
             rows = "".join(f"<tr><td>{_resc(d['from'])}</td><td>{_resc(d['to'])}</td><td class='num'>{d['days']}</td></tr>" for d in dorm)
             t_html += f'<h3>Okresy uśpienia (&gt;7 dni)</h3><table class="data-table"><thead><tr><th>Od</th><th>Do</th><th>Dni</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Analiza czasowa</h2>{t_html}")
+        sections.append(f"<h2>{sn}. Analiza czasowa</h2>{_sdesc('czasowa')}{t_html}")
 
     # ── X. Łańcuchy konwersji ──
     cc = fr.get("conversion_chains", {})
@@ -1133,7 +1283,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         c_html += '</p>'
         rows = "".join(f"<tr><td><b>{_resc(e['from'])}</b></td><td>→</td><td><b>{_resc(e['to'])}</b></td><td class='num'>{e['volume']:.4f}</td></tr>" for e in cc["edges"])
         c_html += f'<table class="data-table"><thead><tr><th>Z tokenu</th><th></th><th>Na token</th><th>Wolumen</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Łańcuchy konwersji tokenów</h2>{c_html}")
+        sections.append(f"<h2>{sn}. Łańcuchy konwersji tokenów</h2>{_sdesc('konwersje')}{c_html}")
 
     # ── X. Structuring ──
     sd = fr.get("structuring_detection", {})
@@ -1149,7 +1299,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if s_freq:
             rows = "".join(f"<tr><td class='num'>{f['amount']:.0f}</td><td class='num'>{f['count']}</td></tr>" for f in s_freq)
             s_html += f'<h3>Najczęściej używane kwoty</h3><table class="data-table"><thead><tr><th>Kwota</th><th>Wystąpienia</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Wykrywanie structuringu (smurfing)</h2>{s_html}")
+        sections.append(f"<h2>{sn}. Wykrywanie structuringu (smurfing)</h2>{_sdesc('structuring')}{s_html}")
 
     # ── X. Wash trading ──
     wt = fr.get("wash_trading", {})
@@ -1163,8 +1313,8 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             w_html += f'<h3>Rynki z zerową pozycją netto</h3><table class="data-table"><thead><tr><th>Rynek</th><th>Wol. brutto</th><th>Poz. netto</th><th>Net%</th><th>Kupno</th><th>Sprzedaż</th></tr></thead><tbody>{rows}</tbody></table>'
         if w_rev:
             rows = "".join(f"<tr><td>{_resc(w['market'])}</td><td>{_resc(w['time1'][:16])}</td><td>{_resc(w['side1'])}</td><td class='num'>{w['amount1']}</td><td>{_resc(w['time2'][:16])}</td><td>{_resc(w['side2'])}</td><td class='num'>{w['amount2']}</td><td class='num'>{w['delay_sec']}</td></tr>" for w in w_rev[:50])
-            w_html += f'<h3>Szybkie odwrócenia (&lt;5 min) — {wt.get("rapid_reversal_count", len(w_rev))} wykrytych</h3><table class="data-table"><thead><tr><th>Rynek</th><th>Czas 1</th><th>Strona</th><th>Kwota</th><th>Czas 2</th><th>Strona</th><th>Kwota</th><th>Opóźn.(s)</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Wash trading</h2>{w_html}")
+            w_html += f'<h3>Szybkie odwrócenia (&lt;5 min) - {wt.get("rapid_reversal_count", len(w_rev))} wykrytych</h3><table class="data-table"><thead><tr><th>Rynek</th><th>Czas 1</th><th>Strona</th><th>Kwota</th><th>Czas 2</th><th>Strona</th><th>Kwota</th><th>Opóźn.(s)</th></tr></thead><tbody>{rows}</tbody></table>'
+        sections.append(f"<h2>{sn}. Wash trading</h2>{_sdesc('wash')}{w_html}")
 
     # ── X. Fiat ramp ──
     fa = fr.get("fiat_ramp_analysis", {})
@@ -1186,7 +1336,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             all_c = sorted(set(list(ci.keys()) + list(co.keys())))
             rows = "".join(f"<tr><td><b>{_resc(c)}</b></td><td class='num'>{ci.get(c, 0):.2f}</td><td class='num'>{co.get(c, 0):.2f}</td></tr>" for c in all_c)
             f_html += f'<table class="data-table"><thead><tr><th>Waluta</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Analiza fiat on/off ramp</h2>{f_html}")
+        sections.append(f"<h2>{sn}. Analiza fiat on/off ramp</h2>{_sdesc('fiat')}{f_html}")
 
     # ── X. P2P ──
     p2p = fr.get("p2p_analysis", {})
@@ -1202,7 +1352,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if tops:
             rows = "".join(f"<tr><td><code>{_resc(cp['id'])}</code></td><td class='num'>{cp['count']}</td><td class='num'>{cp['volume']:.4f}</td><td>{_resc(', '.join(cp.get('tokens', [])))}</td></tr>" for cp in tops)
             p_html += f'<h3>Top kontrahenci P2P</h3><table class="data-table"><thead><tr><th>ID</th><th>TX</th><th>Wolumen</th><th>Tokeny</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Analiza P2P</h2>{p_html}")
+        sections.append(f"<h2>{sn}. Analiza P2P</h2>{_sdesc('p2p')}{p_html}")
 
     # ── X. Velocity ──
     va = fr.get("velocity_analysis", {})
@@ -1215,7 +1365,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         v_html += '</table>'
         rows = "".join(f"<tr><td><b>{_resc(t['token'])}</b></td><td class='num'>{t['avg_hold_hours']}</td><td class='num'>{t['min_hold_hours']}</td><td class='num'>{t['deposit_count']}</td><td class='num'>{t['withdrawal_count']}</td></tr>" for t in va["token_velocities"])
         v_html += f'<table class="data-table"><thead><tr><th>Token</th><th>Śr. czas (godz.)</th><th>Min (godz.)</th><th>Wpłaty</th><th>Wypłaty</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Prędkość przepływu środków</h2>{v_html}")
+        sections.append(f"<h2>{sn}. Prędkość przepływu środków</h2>{_sdesc('velocity')}{v_html}")
 
     # ── X. Fee analysis ──
     fee = fr.get("fee_analysis", {})
@@ -1229,7 +1379,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if fees:
             rows = "".join(f"<tr><td><b>{_resc(tok)}</b></td><td class='num'>{val:.8f}</td></tr>" for tok, val in fees.items())
             fe_html += f'<table class="data-table"><thead><tr><th>Token opłaty</th><th>Suma opłat</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Analiza opłat (fees)</h2>{fe_html}")
+        sections.append(f"<h2>{sn}. Analiza opłat (fees)</h2>{_sdesc('fees')}{fe_html}")
 
     # ── X. Network analysis ──
     na = fr.get("network_analysis", {})
@@ -1247,7 +1397,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             style = 'background:#fef2f2' if is_hr else ''
             rows += f"<tr style='{style}'><td><b>{_resc(n['network'])}</b>{'⚠️' if is_hr else ''}</td><td class='num'>{n['deposits']}</td><td class='num'>{n['withdrawals']}</td><td class='num'>{n['total_tx']}</td><td class='num'>{n['dep_volume']:.4f}</td><td class='num'>{n['wd_volume']:.4f}</td></tr>"
         n_html += f'<table class="data-table"><thead><tr><th>Sieć</th><th>Wpłaty</th><th>Wypłaty</th><th>TX</th><th>Wol. wpłat</th><th>Wol. wypłat</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Analiza sieci blockchain</h2>{n_html}")
+        sections.append(f"<h2>{sn}. Analiza sieci blockchain</h2>{_sdesc('sieci')}{n_html}")
 
     # ── X. Extended security ──
     es = fr.get("extended_security", {})
@@ -1263,7 +1413,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         if vpn:
             rows = "".join(f"<tr><td>{_resc(v['date'])}</td><td>{_resc(', '.join(v.get('countries', [])))}</td><td class='num' style='color:#dc2626'>{v['country_count']}</td><td class='num'>{v['login_count']}</td></tr>" for v in vpn)
             e_html += f'<h3>Podejrzenie VPN/proxy</h3><table class="data-table"><thead><tr><th>Data</th><th>Kraje</th><th>Ilość krajów</th><th>Loginy</th></tr></thead><tbody>{rows}</tbody></table>'
-        sections.append(f"<h2>{sn}. Rozszerzona analiza bezpieczeństwa</h2>{e_html}")
+        sections.append(f"<h2>{sn}. Rozszerzona analiza bezpieczeństwa</h2>{_sdesc('ext_security')}{e_html}")
 
     # ── X. Transakcje ──
     txs = r.get("transactions", [])
@@ -1278,7 +1428,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             rows += f"<tr><td>{_resc((tx.get('timestamp', '') or '')[:16])}</td><td>{_resc(tx.get('tx_type', ''))}</td><td>{_resc(tx.get('token', ''))}</td><td class='num'>{tx.get('amount', 0):.4f}</td><td style='word-break:break-all;font-size:10px'>{_resc(from_addr)}</td><td style='word-break:break-all;font-size:10px'>{_resc(to_addr)}</td><td style='{risk_style}'>{rs:.0f}</td><td>{_resc(', '.join(tx.get('risk_tags', [])))}</td></tr>"
         total = r.get("transactions_total", len(txs))
         note = f'<p class="muted">Wyświetlono {min(len(txs), 500)} z {total} transakcji.</p>' if total > 500 else ""
-        sections.append(f'<h2>{sn}. Transakcje</h2><table class="data-table"><thead><tr><th>Data</th><th>Typ</th><th>Token</th><th>Kwota</th><th>Od</th><th>Do/Kontrahent</th><th>Ryzyko</th><th>Tagi</th></tr></thead><tbody>{rows}</tbody></table>{note}')
+        sections.append(f'<h2>{sn}. Transakcje</h2>{_sdesc("transakcje")}<table class="data-table"><thead><tr><th>Data</th><th>Typ</th><th>Token</th><th>Kwota</th><th>Od</th><th>Do/Kontrahent</th><th>Ryzyko</th><th>Tagi</th></tr></thead><tbody>{rows}</tbody></table>{note}')
 
     # ── Stopka: Słownik typów transakcji ──
     used_types: set = set()
@@ -1310,7 +1460,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 <html lang="pl">
 <head>
 <meta charset="utf-8">
-<title>Raport Crypto — {_resc(filename)}</title>
+<title>Raport Crypto - {_resc(filename)}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 body {{ font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; color: #1e293b; font-size: 14px; }}
@@ -1328,6 +1478,7 @@ h4 {{ color: #64748b; margin-top: 14px; }}
 .data-table tr:nth-child(even) {{ background: #f8fafc; }}
 code {{ background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 11px; word-break: break-all; }}
 .muted {{ color: #94a3b8; font-size: 12px; }}
+.section-desc {{ color: #475569; font-size: 12px; line-height: 1.6; margin: 4px 0 14px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 0 4px 4px 0; }}
 .profile-card {{ padding: 10px 14px; margin: 8px 0; background: #f8fafc; border-radius: 6px; }}
 .profile-card .desc {{ color: #64748b; font-size: 12px; margin-top: 2px; }}
 .profile-card ul {{ margin: 6px 0 0; padding-left: 18px; font-size: 12px; }}
@@ -1395,7 +1546,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
 
     # Summary
     lines.append("--- PODSUMOWANIE ---")
-    lines.append(f"  Okres: {(r.get('date_from', '') or '')[:10]} — {(r.get('date_to', '') or '')[:10]}")
+    lines.append(f"  Okres: {(r.get('date_from', '') or '')[:10]} - {(r.get('date_to', '') or '')[:10]}")
     lines.append(f"  Transakcje: {r.get('tx_count', 0)}")
     lines.append(f"  Ryzyko AML: {r.get('risk_score', 0):.1f}/100")
     lines.append("")
@@ -1407,7 +1558,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
         for p in bp["profiles"][:3]:
             if p["score"] < 15:
                 continue
-            lines.append(f"  {p.get('icon', '')} {p['label']} — {p['score']}%")
+            lines.append(f"  {p.get('icon', '')} {p['label']} - {p['score']}%")
             for rr in p.get("reasons", []):
                 lines.append(f"    - {rr}")
         lines.append("")
@@ -1430,7 +1581,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
             info = tc_txt.get(tok, {})
             name = info.get("name", "")[:15]
-            rank = f"#{info['rank']}" if info.get("rank") else "—"
+            rank = f"#{info['rank']}" if info.get("rank") else "-"
             cat = info.get("category", "")[:20]
             alert = info.get("alert_level", "NORMAL")
             desc = info.get("description", "")[:60]
@@ -1453,7 +1604,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
             lines.append(f"  UID: {uid}  TX: {c.get('tx_count', 0)}  IN: {c.get('total_in', 0):.4f}  OUT: {c.get('total_out', 0):.4f}  Tokeny: {', '.join(c.get('tokens', []))}")
         lines.append("")
 
-    # Addresses — merged, deduplicated (case-insensitive for EVM)
+    # Addresses - merged, deduplicated (case-insensitive for EVM)
     ext_src = fr.get("external_source_addresses", [])
     ext_dst = fr.get("external_dest_addresses", [])
     if ext_src or ext_dst:
@@ -1495,7 +1646,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
         lines.append(f"  Nocna aktywność (0-5): {ta.get('night_activity_count', 0)} ({ta.get('night_activity_ratio', 0)}%)")
         lines.append(f"  Weekend/robocze: {ta.get('weekend_count', 0)}/{ta.get('weekday_count', 0)} ({ta.get('weekend_ratio', 0)}%)")
         for b in ta.get("burst_days", []):
-            lines.append(f"  BURST: {b['date']} — {b['tx_count']} tx")
+            lines.append(f"  BURST: {b['date']} - {b['tx_count']} tx")
         for d in ta.get("dormancy_periods", []):
             lines.append(f"  UŚPIENIE: {d['from']} → {d['to']} ({d['days']} dni)")
         lines.append("")
@@ -1608,7 +1759,7 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
         lines.append("SŁOWNIK TYPÓW TRANSAKCJI")
         lines.append("-" * 70)
         for tt, desc in legend:
-            lines.append(f"  {tt:<20} — {desc}")
+            lines.append(f"  {tt:<20} - {desc}")
         lines.append("")
 
     lines.append("=" * 70)
@@ -1690,6 +1841,121 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                     for run in para.runs:
                         run.font.size = Pt(9)
 
+    # Section descriptions (same dict as HTML report, defined in _build_crypto_report_html)
+    _DOCX_DESC = {
+        "podsumowanie": (
+            "Podstawowe statystyki analizowanego konta kryptowalutowego. Sekcja zawiera informacje o łącznej liczbie transakcji, "
+            "zakresie dat aktywności, listę obsługiwanych tokenów (kryptowalut) oraz źródło danych (np. nazwa giełdy, eksport z blockchainu). "
+            "Te dane pozwalają szybko ocenić skalę aktywności - czy mamy do czynienia z kontem o kilku transakcjach, "
+            "czy z intensywnie używanym rachunkiem z tysiącami operacji rozłożonych na lata."
+        ),
+        "profil": (
+            "Na podstawie wzorców transakcji system automatycznie rozpoznaje typ użytkownika - np. inwestor długoterminowy (kupuje i trzyma), "
+            "aktywny trader (częste kupna/sprzedaże), arbitrażysta (wykorzystuje różnice cenowe między giełdami) czy podmiot tranzytowy "
+            "(środki szybko przechodzą przez konto). Profil jest wyznaczany algorytmicznie na podstawie częstotliwości transakcji, "
+            "czasu trzymania tokenów, rodzajów operacji i ich wolumenów. Wynik zawiera procentowy poziom pewności oraz listę powodów, "
+            "dla których dany profil został przypisany. Jeden użytkownik może wykazywać cechy kilku profili jednocześnie."
+        ),
+        "ryzyko": (
+            "Kluczowa sekcja z punktu widzenia przeciwdziałania praniu pieniędzy (AML - Anti-Money Laundering). "
+            "System analizuje wszystkie transakcje i przypisuje zagregowany wynik ryzyka w skali 0–100 punktów, "
+            "gdzie 0 oznacza brak podejrzanych zachowań, a 100 - bardzo wysokie ryzyko. Ocena jest budowana z wielu czynników, m.in.: "
+            "structuring (dzielenie kwot na mniejsze, aby ominąć progi raportowe), privacy coins (użycie kryptowalut utrudniających śledzenie), "
+            "szybkie przeloty (środki wpływające i wypływające w ciągu godzin), kontrahenci wysokiego ryzyka."
+        ),
+        "portfel": (
+            "Zestawienie wszystkich kryptowalut (tokenów), które pojawiły się na analizowanym koncie. "
+            "Wpływy i wypływy to łączna wartość otrzymana i wysłana w danym tokenie; saldo netto to różnica. "
+            "Kategoria klasyfikuje token (np. L1/infrastructure, stablecoin, payments/transfers, memecoin, privacy coin). "
+            "Alert wskazuje poziom ryzyka tokena (NORMAL, MEDIUM, HIGH, CRITICAL); "
+            "token oznaczony jako HIGH/CRITICAL wymaga szczególnej uwagi analityka."
+        ),
+        "wykresy": (
+            "Graficzna prezentacja danych ułatwiająca szybkie wychwycenie trendów i anomalii. "
+            "Wykres salda w czasie pokazuje jak zmieniało się saldo każdego tokena. "
+            "Graf przepływu transakcji przedstawia powiązania między adresami i kontrahentami."
+        ),
+        "telefony": (
+            "Numery telefonów wykryte w danych transakcyjnych, zidentyfikowane wraz z krajem pochodzenia. "
+            "Powiązanie numerów telefonów z konkretnymi transakcjami może pomóc w identyfikacji kontrahentów."
+        ),
+        "kontrahenci": (
+            "Lista kontrahentów wewnętrznych giełdy z podsumowaniem liczby transakcji, wolumenów wpływów i wypływów oraz używanych tokenów. "
+            "Pozwala zidentyfikować najaktywniejszych partnerów handlowych i wykryć nietypowe powiązania."
+        ),
+        "adresy": (
+            "Zestawienie adresów blockchain powiązanych z analizowanym kontem. "
+            "Adresy depozytowe to portfele użytkownika na giełdzie. Adresy zewnętrzne to portfele spoza giełdy. "
+            "Adresy dwukierunkowe mogą wskazywać na własne portfele użytkownika poza giełdą lub na bliskie relacje handlowe."
+        ),
+        "czasowa": (
+            "Rozkład transakcji w podziale na godziny dnia i dni tygodnia. "
+            "Pozwala wykryć aktywność automatyczną (boty), koordynację (wąskie okna czasowe) "
+            "i nietypowe wzorce (np. wyłącznie nocna aktywność sugerująca inną strefę czasową)."
+        ),
+        "konwersje": (
+            "Sekwencje szybkich zamian jednego tokena na drugi, np. PLN → BTC → XMR → USDT → EUR. "
+            "Wieloetapowe konwersje w krótkim czasie to klasyczna technika layeringu - "
+            "tworzenia warstw transakcji utrudniających prześledzenie pochodzenia środków."
+        ),
+        "structuring": (
+            "Structuring (smurfing) polega na dzieleniu dużej kwoty na wiele mniejszych transakcji - "
+            "często tuż poniżej progów raportowych (np. 15 000 EUR w UE, 10 000 USD w USA). "
+            "Celem jest uniknięcie automatycznego zgłoszenia transakcji do jednostki analityki finansowej."
+        ),
+        "wash": (
+            "Wash trading to transakcje, w których ten sam podmiot występuje jednocześnie jako kupujący i sprzedający. "
+            "Celem jest sztuczne generowanie wolumenu obrotu - np. aby token wyglądał na bardziej płynny niż jest w rzeczywistości."
+        ),
+        "fiat": (
+            "Punkty styku między tradycyjnym systemem finansowym a światem kryptowalut. "
+            "On-ramp (wpłata fiat) to wpłaty z konta bankowego na giełdę; off-ramp to wypłaty z giełdy na konto bankowe. "
+            "Asymetria wpłat i wypłat fiat może wskazywać na pranie pieniędzy lub transfer wartości."
+        ),
+        "p2p": (
+            "Transakcje peer-to-peer to bezpośrednia wymiana kryptowalut między użytkownikami, "
+            "często z pominięciem standardowej książki zleceń giełdy. Handel P2P bywa wykorzystywany "
+            "do omijania procedur KYC (Know Your Customer) i AML."
+        ),
+        "velocity": (
+            "Analiza szybkości przepływu środków przez konto. "
+            "Średni czas trzymania to ile czasu token pozostaje na koncie; konta tranzytowe trzymają minuty lub godziny. "
+            "Wskaźniki hot wallet oznaczają tokeny ze średnim trzymaniem poniżej 1 godziny."
+        ),
+        "fees": (
+            "Zestawienie opłat transakcyjnych w podziale na tokeny. "
+            "Pozwala oszacować koszty aktywności na koncie i wykryć transakcje z nietypowo wysokimi opłatami "
+            "(celowe podnoszenie opłat może wskazywać na front-running)."
+        ),
+        "sieci": (
+            "Statystyki wykorzystania różnych sieci blockchain. Pozwala określić preferencje sieciowe, "
+            "wykryć bridge'owanie (przenoszenie środków między łańcuchami) "
+            "oraz ocenić, czy użytkownik korzysta z sieci o niższym poziomie monitoringu AML."
+        ),
+        "ext_security": (
+            "Pogłębiona analiza techniczna sesji i urządzeń: anomalie logowań, wykryte VPN/proxy, "
+            "geolokalizacja kart - rozbieżności lokalizacji transakcji kartowych z logowaniami "
+            "mogą wskazywać na kradzież tożsamości lub cloning karty."
+        ),
+        "transakcje": (
+            "Kompletna lista wszystkich transakcji - baza dowodowa dla całej analizy. "
+            "Każdy wiersz zawiera datę, typ operacji, token i kwotę, kontrahentów, "
+            "poziom ryzyka i tagi klasyfikacyjne. Pozwala analitykowi na ręczną weryfikację "
+            "dowolnej transakcji wychwycone przez algorytmy w sekcjach powyżej."
+        ),
+    }
+
+    def _add_desc(key: str) -> None:
+        """Add an italic description paragraph to the DOCX document."""
+        txt = _DOCX_DESC.get(key, "")
+        if txt:
+            p = doc.add_paragraph(txt)
+            p.paragraph_format.space_after = Pt(6)
+            for run in p.runs:
+                run.italic = True
+                run.font.size = Pt(9)
+                run.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+
     # ── 1. Identyfikacja ──
     meta = r.get("metadata", {}) or {}
     doc.add_heading("1. Identyfikacja podmiotu", level=1)
@@ -1718,10 +1984,11 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
 
     # ── 2. Podsumowanie ──
     doc.add_heading("2. Podsumowanie ogólne", level=1)
+    _add_desc("podsumowanie")
     date_from = (r.get("date_from", "") or "")[:10]
     date_to = (r.get("date_to", "") or "")[:10]
     add_kv_table([
-        ("Okres analizy", f"{date_from} — {date_to}"),
+        ("Okres analizy", f"{date_from} - {date_to}"),
         ("Transakcje", r.get("tx_count", 0)),
         ("Portfele/adresy", r.get("wallet_count", 0)),
         ("Kontrahenci", r.get("counterparty_count", 0)),
@@ -1733,11 +2000,12 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     bp = r.get("behavior_profile", {})
     if bp and bp.get("profiles"):
         doc.add_heading("3. Profil zachowania użytkownika", level=1)
+        _add_desc("profil")
         for p in bp["profiles"][:5]:
             if p["score"] < 15:
                 continue
             para = doc.add_paragraph()
-            run = para.add_run(f"{p.get('icon', '')} {p['label']} — {p['score']}%")
+            run = para.add_run(f"{p.get('icon', '')} {p['label']} - {p['score']}%")
             run.bold = True
             for reason in p.get("reasons", []):
                 doc.add_paragraph(f"  • {reason}", style="List Bullet")
@@ -1746,6 +2014,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     risk_reasons = r.get("risk_reasons", [])
     if risk_reasons:
         doc.add_heading("4. Czynniki ryzyka AML", level=1)
+        _add_desc("ryzyko")
         for rr in risk_reasons:
             doc.add_paragraph(f"• {rr}", style="List Bullet")
 
@@ -1754,6 +2023,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     tc = r.get("token_classification", {}) or {}
     if tokens:
         doc.add_heading("5. Portfel tokenów", level=1)
+        _add_desc("portfel")
         t_rows = []
         for tok, s in sorted(tokens.items(), key=lambda x: x[1].get("count", 0), reverse=True):
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
@@ -1784,6 +2054,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
             import matplotlib.dates as mdates
 
             doc.add_heading("6. Wykresy", level=1)
+            _add_desc("wykresy")
 
             if has_balance:
                 import math as _math
@@ -1880,12 +2151,13 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
                 doc.add_picture(buf, width=Cm(14))
                 buf.close()
         except ImportError:
-            pass  # matplotlib not available — skip charts in DOCX
+            pass  # matplotlib not available - skip charts in DOCX
 
     # ── 7. Numery telefonów ──
     phones = r.get("detected_phones", [])
     if phones:
         doc.add_heading("7. Zidentyfikowane numery telefonów", level=1)
+        _add_desc("telefony")
         p_rows = [[p["number"], p.get("country_name", "?"), p.get("country_iso", "?"),
                     str(p.get("occurrences", 0))] for p in phones]
         add_data_table(["Numer", "Kraj", "ISO", "Wystąpienia"], p_rows)
@@ -1894,6 +2166,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     cps = bs.get("counterparties", {})
     if cps:
         doc.add_heading("8. Kontrahenci wewnętrzni", level=1)
+        _add_desc("kontrahenci")
         c_rows = []
         for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
             c_rows.append([uid, str(c.get("tx_count", 0)),
@@ -1906,6 +2179,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     ext_dst = fr.get("external_dest_addresses", [])
     if ext_src or ext_dst:
         doc.add_heading("9. Adresy zewnętrzne", level=1)
+        _add_desc("adresy")
 
         def _nk_docx(addr: str) -> str:
             a = addr.strip()
@@ -1941,6 +2215,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_ta = fr.get("temporal_analysis", {})
     if d_ta and d_ta.get("active_span_days"):
         doc.add_heading("10. Analiza czasowa", level=1)
+        _add_desc("czasowa")
         add_kv_table([
             ("Okres aktywności", f"{d_ta.get('active_span_days', 0)} dni"),
             ("Aktywne dni", f"{d_ta.get('active_days', 0)} ({d_ta.get('activity_density', 0)}%)"),
@@ -1957,6 +2232,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_cc = fr.get("conversion_chains", {})
     if d_cc and d_cc.get("edges"):
         doc.add_heading("11. Łańcuchy konwersji tokenów", level=1)
+        _add_desc("konwersje")
         doc.add_paragraph(f"Unikalne pary: {d_cc.get('unique_swap_pairs', 0)}")
         add_data_table(["Z tokenu", "Na token", "Wolumen"],
                        [[e["from"], e["to"], f"{e['volume']:.4f}"] for e in d_cc["edges"]])
@@ -1965,6 +2241,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_sd = fr.get("structuring_detection", {})
     if d_sd.get("alerts"):
         doc.add_heading("12. Wykrywanie structuringu", level=1)
+        _add_desc("structuring")
         add_data_table(["Data", "Typ", "Próg", "TX", "Suma"],
                        [[a["date"], a["type"], str(a["threshold"]), str(a["count"]),
                          f"{a['daily_total']:.2f}"] for a in d_sd["alerts"]])
@@ -1973,6 +2250,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_wt = fr.get("wash_trading", {})
     if d_wt.get("zero_net_markets"):
         doc.add_heading("13. Wash trading", level=1)
+        _add_desc("wash")
         add_data_table(["Rynek", "Wol. brutto", "Poz. netto", "Net%", "Kupno", "Sprzedaż"],
                        [[m["market"], f"{m['gross_volume']:.4f}", f"{m['net_position']:.4f}",
                          f"{m['net_ratio']}%", f"{m['buys']:.4f}", f"{m['sells']:.4f}"]
@@ -1982,6 +2260,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_fa = fr.get("fiat_ramp_analysis", {})
     if d_fa and (d_fa.get("fiat_deposit_count", 0) > 0 or d_fa.get("fiat_withdrawal_count", 0) > 0):
         doc.add_heading("14. Analiza fiat on/off ramp", level=1)
+        _add_desc("fiat")
         kv = [
             ("Wpłaty fiat", d_fa.get("fiat_deposit_count", 0)),
             ("Wypłaty fiat", d_fa.get("fiat_withdrawal_count", 0)),
@@ -1997,6 +2276,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_p2p = fr.get("p2p_analysis", {})
     if d_p2p and d_p2p.get("total_count", 0) > 0:
         doc.add_heading("15. Analiza P2P", level=1)
+        _add_desc("p2p")
         add_kv_table([
             ("Transakcje P2P", d_p2p["total_count"]),
             ("% aktywności", f"{d_p2p.get('total_pct', 0)}%"),
@@ -2013,6 +2293,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_va = fr.get("velocity_analysis", {})
     if d_va and d_va.get("token_velocities"):
         doc.add_heading("16. Prędkość przepływu środków", level=1)
+        _add_desc("velocity")
         add_kv_table([
             ("DEP/WD", f"{d_va.get('deposit_count', 0)}/{d_va.get('withdrawal_count', 0)}"),
             ("Ratio", d_va.get("dep_wd_ratio", 0)),
@@ -2027,6 +2308,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_fee = fr.get("fee_analysis", {})
     if d_fee and d_fee.get("fee_paying_tx_count", 0) > 0:
         doc.add_heading("17. Analiza opłat", level=1)
+        _add_desc("fees")
         add_kv_table([
             ("TX z opłatami", d_fee["fee_paying_tx_count"]),
             ("Opłaty BNB", f"{d_fee.get('bnb_fee_count', 0)} ({d_fee.get('bnb_fee_ratio', 0)}%)"),
@@ -2040,6 +2322,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_na = fr.get("network_analysis", {})
     if d_na and d_na.get("networks"):
         doc.add_heading("18. Analiza sieci blockchain", level=1)
+        _add_desc("sieci")
         add_data_table(["Sieć", "Wpłaty", "Wypłaty", "TX", "Wol. wpłat", "Wol. wypłat"],
                        [[n["network"], str(n["deposits"]), str(n["withdrawals"]),
                          str(n["total_tx"]), f"{n['dep_volume']:.4f}", f"{n['wd_volume']:.4f}"]
@@ -2049,6 +2332,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     d_es = fr.get("extended_security", {})
     if d_es:
         doc.add_heading("19. Rozszerzona analiza bezpieczeństwa", level=1)
+        _add_desc("ext_security")
         add_kv_table([
             ("Kraje logowań", ", ".join(d_es.get("login_countries", []))),
             ("Podejrzane dni VPN", d_es.get("vpn_suspect_days", 0)),
@@ -2065,6 +2349,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     txs = r.get("transactions", [])
     if txs:
         doc.add_heading("20. Transakcje", level=1)
+        _add_desc("transakcje")
         doc.add_paragraph(f"Łącznie: {len(txs)}")
         tx_rows = []
         for tx in txs:
@@ -2091,7 +2376,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
 
     # Footer
     doc.add_paragraph("")
-    p = doc.add_paragraph(f"Wygenerowano: {now} — AISTATE Crypto Analysis Module")
+    p = doc.add_paragraph(f"Wygenerowano: {now} - AISTATE Crypto Analysis Module")
     p.runs[0].italic = True
 
     buf = BytesIO()
