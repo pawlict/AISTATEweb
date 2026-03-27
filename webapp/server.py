@@ -3295,6 +3295,31 @@ async def api_translation_export(
 
     raw = (text or "").strip()
 
+    def _preserve_newlines_for_md(txt: str) -> str:
+        """Convert single newlines to double for markdown paragraph breaks.
+
+        Preserves existing double newlines, list items, and headings.
+        This ensures translated text with line breaks renders as
+        separate paragraphs in HTML/DOCX instead of one big block.
+        """
+        import re as _re
+        lines = txt.split("\n")
+        out = []
+        for i, line in enumerate(lines):
+            out.append(line)
+            # Add extra newline after non-empty lines that are followed by
+            # another non-empty line (unless already a blank line separator)
+            if (line.strip()
+                    and i + 1 < len(lines)
+                    and lines[i + 1].strip()
+                    and not _re.match(r'^#{1,6}\s', line)          # not a heading
+                    and not _re.match(r'^#{1,6}\s', lines[i + 1])  # next is not heading
+                    and not _re.match(r'^[-*+]\s', lines[i + 1])   # next is not list item
+                    and not _re.match(r'^\d+\.\s', lines[i + 1])   # next is not numbered list
+                    ):
+                out.append("")  # extra blank line = paragraph break in markdown
+        return "\n".join(out)
+
     # ---- TXT: plain text with typographic cleanup ----
     if fmt == "txt":
         try:
@@ -3312,7 +3337,7 @@ async def api_translation_export(
     if fmt == "html":
         from backend.report_generator import _md_to_html
 
-        body_html = _typographic_cleanup_html(_md_to_html(raw))
+        body_html = _typographic_cleanup_html(_md_to_html(_preserve_newlines_for_md(raw)))
         out_html = f"""<!doctype html>
 <html lang="pl">
 <head>
@@ -3371,7 +3396,7 @@ async def api_translation_export(
     if fmt == "docx":
         from backend.report_generator import save_docx_from_markdown
 
-        cleaned = _typographic_cleanup(raw)
+        cleaned = _typographic_cleanup(_preserve_newlines_for_md(raw))
         with _tmpmod.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
             tmp_path = _Path(tmp.name)
         try:
