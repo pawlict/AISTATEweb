@@ -587,13 +587,11 @@
             <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="di_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="di_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
             <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="di_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/dokumenty/markdown.svg" alt="Notatki" draggable="false"></label>
+            <label class="pill pill-icon" title="Dodaj notatkę do raportu" data-i18n-title="analysis.report_add_notes"><input type="checkbox" id="di_include_notes" value="1"><img src="/static/icons/dokumenty/notes.svg" alt="Notatki" draggable="false"></label>
             <button class="btn pill-icon" id="di_report_save_btn" title="Zapisz raport" data-i18n-title="analysis.report_save"><img src="/static/icons/pliki/file_save.svg" alt="Zapisz" draggable="false"></button>
           </div>
         </div>
       </div>
-
-      <a class="btn secondary" id="di_download" href="#" style="display:none" data-i18n="btn.download_txt">Pobierz TXT</a>
 
     </div>
   </div>
@@ -640,21 +638,6 @@
       </div>
     </div>
 
-    <!-- Speaker mapping -->
-    <div class="subcard">
-      <div class="label" style="font-weight:800;font-size:15px;margin-bottom:10px" data-i18n="diar.speakers.title"><i data-icon="transcription" data-size="16"></i> Nazwy mówców</div>
-      <div id="speaker_mapping_ui" class="speaker-mapping-container">
-        <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
-      </div>
-      <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
-
-      <div class="row" style="margin-top:12px;gap:10px;flex-wrap:wrap">
-        <button class="btn" id="di_apply_map" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes"><i data-icon="refresh" data-size="14"></i> Wprowadź zmiany</button>
-      </div>
-    </div>
-
-    <div class="hr"></div>
-
     <!-- Result + Analyst Panel layout -->
     <div class="analyst-panel-layout">
       <!-- Panel analityczny (collapsible left sidebar) -->
@@ -697,6 +680,23 @@
             </div>
             <div class="analyst-panel-items" id="di_block_notes_list">
               <div class="analyst-panel-empty" data-i18n-html="notes.blocks.empty_html">Brak notatek. Kliknij ikonę notatki na bloku aby dodać.</div>
+            </div>
+          </div>
+
+          <div class="analyst-panel-divider"></div>
+
+          <!-- Speaker mapping (moved from main content) -->
+          <div class="analyst-panel-section">
+            <div class="analyst-panel-label" style="display:flex;align-items:center;gap:5px">
+              <i data-icon="transcription" data-size="14"></i>
+              <span data-i18n="diar.speakers.title">Nazwy mówców</span>
+            </div>
+            <div id="speaker_mapping_ui" class="speaker-mapping-container">
+              <div class="mapping-empty" data-i18n="diar.speakers.empty">Wykonaj diaryzację aby wykryć mówców.</div>
+            </div>
+            <textarea id="di_speaker_map" class="bigarea" placeholder='{"SPEAKER_00": "Jan", "SPEAKER_01": "Anna"}' style="display:none"></textarea>
+            <div style="margin-top:8px">
+              <button class="btn" id="di_apply_map" style="width:100%;font-size:12px" data-i18n-title="btn.apply_changes_hint" data-i18n="btn.apply_changes"><i data-icon="refresh" data-size="14"></i> Wprowadź zmiany</button>
             </div>
           </div>
         </div>
@@ -971,7 +971,7 @@ function renderBlockNotesList() {
     container.innerHTML = `
       <div class="small" style="opacity:0.6;text-align:center;padding:20px;">
         Brak notatek do bloków.<br>
-        Kliknij <img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
+        Kliknij <img src="/static/icons/dokumenty/notes.svg" width="19" height="19" style="vertical-align:middle" alt="Notatka"> obok bloku aby dodać.
       </div>
     `;
     return;
@@ -1121,11 +1121,11 @@ function updateBlockNoteIconInSeg(idx) {
   }
   
   if (hasBlockNote(idx)) {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    icon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
     icon.classList.add('has-note');
     icon.title = 'Ma notatkę - kliknij aby edytować';
   } else {
-    icon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    icon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
     icon.classList.remove('has-note');
     icon.title = 'Dodaj notatkę';
   }
@@ -1727,7 +1727,7 @@ function diRender(){
     // Ikona notatki
     const noteIcon = document.createElement('span');
     noteIcon.className = 'seg-note-icon' + (hasBlockNote(idx) ? ' has-note' : '');
-    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/markdown.svg" width="19" height="19" alt="Notatka">';
+    noteIcon.innerHTML = '<img src="/static/icons/dokumenty/notes.svg" width="19" height="19" alt="Notatka">';
     noteIcon.title = hasBlockNote(idx) ? 'Ma notatkę - kliknij aby edytować' : 'Dodaj notatkę';
     bindNoteIconEvents(noteIcon, idx);
     
