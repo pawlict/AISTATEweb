@@ -768,14 +768,41 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 
     # ── V. Portfel tokenów ──
     tokens = r.get("tokens", {})
+    tc = r.get("token_classification", {}) or {}
     if tokens:
         sn += 1
+        alert_colors = {"CRITICAL": "#dc2626", "HIGH": "#f97316", "MEDIUM": "#eab308", "NORMAL": "#22c55e"}
         rows = ""
         for tok, s in sorted(tokens.items(), key=lambda x: x[1].get("count", 0), reverse=True):
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
             nc = "#22c55e" if net >= 0 else "#dc2626"
-            rows += f"<tr><td style='font-weight:600'>{_resc(tok)}</td><td class='num'>{s.get('received', 0):.4f}</td><td class='num'>{s.get('sent', 0):.4f}</td><td class='num' style='color:{nc}'>{net:.4f}</td><td>{s.get('count', 0)}</td></tr>"
-        sections.append(f'<h2>{sn}. Portfel tokenów</h2><table class="data-table"><thead><tr><th>Token</th><th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th></tr></thead><tbody>{rows}</tbody></table>')
+            info = tc.get(tok, {})
+            name = info.get("name", "")
+            rank = f"#{info['rank']}" if info.get("rank") else "—"
+            cat = info.get("category", "")
+            alert = info.get("alert_level", "NORMAL")
+            ac = alert_colors.get(alert, "#94a3b8")
+            desc = _resc(info.get("description", ""))
+            risk_note = _resc(info.get("risk_note", ""))
+            tooltip = f' title="{risk_note}"' if risk_note else ""
+            rows += (f"<tr><td style='font-weight:600'>{_resc(tok)}</td>"
+                     f"<td>{_resc(name)}</td>"
+                     f"<td style='text-align:center'>{_resc(rank)}</td>"
+                     f"<td><span style='font-size:11px;padding:1px 6px;border-radius:3px;background:#f1f5f9'>{_resc(cat)}</span></td>"
+                     f"<td class='num'>{s.get('received', 0):.4f}</td>"
+                     f"<td class='num'>{s.get('sent', 0):.4f}</td>"
+                     f"<td class='num' style='color:{nc}'>{net:.4f}</td>"
+                     f"<td>{s.get('count', 0)}</td>"
+                     f"<td{tooltip}><span style='color:{ac};font-weight:600;font-size:11px'>{_resc(alert)}</span></td>"
+                     f"<td style='font-size:11px;color:#64748b;max-width:300px'>{desc}</td></tr>")
+        sections.append(
+            f'<h2>{sn}. Portfel tokenów</h2>'
+            f'<table class="data-table"><thead><tr>'
+            f'<th>Token</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>'
+            f'<th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th>'
+            f'<th>Alert</th><th>Opis</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table>'
+        )
 
     # ── VI. Kontrahenci i transfery ──
     cps = bs.get("counterparties", {})
@@ -1295,10 +1322,17 @@ def _build_crypto_report_txt(r: Dict[str, Any]) -> str:
     tokens = r.get("tokens", {})
     if tokens:
         lines.append("--- PORTFEL TOKENÓW ---")
-        lines.append(f"  {'Token':<10} {'Wpływy':>14} {'Wypływy':>14} {'Saldo':>14} {'TX':>6}")
+        tc_txt = r.get("token_classification", {}) or {}
+        lines.append(f"  {'Token':<8} {'Nazwa':<16} {'Rank':>5} {'Kategoria':<22} {'Wpływy':>14} {'Wypływy':>14} {'Saldo':>14} {'TX':>6}  {'Alert':<8} Opis")
         for tok, s in sorted(tokens.items(), key=lambda x: x[1].get("count", 0), reverse=True):
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
-            lines.append(f"  {tok:<10} {s.get('received', 0):>14.4f} {s.get('sent', 0):>14.4f} {net:>14.4f} {s.get('count', 0):>6}")
+            info = tc_txt.get(tok, {})
+            name = info.get("name", "")[:15]
+            rank = f"#{info['rank']}" if info.get("rank") else "—"
+            cat = info.get("category", "")[:20]
+            alert = info.get("alert_level", "NORMAL")
+            desc = info.get("description", "")[:60]
+            lines.append(f"  {tok:<8} {name:<16} {rank:>5} {cat:<22} {s.get('received', 0):>14.4f} {s.get('sent', 0):>14.4f} {net:>14.4f} {s.get('count', 0):>6}  {alert:<8} {desc}")
         lines.append("")
 
     # Phone numbers
@@ -1615,14 +1649,25 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
 
     # ── 5. Portfel tokenów ──
     tokens = r.get("tokens", {})
+    tc = r.get("token_classification", {}) or {}
     if tokens:
         doc.add_heading("5. Portfel tokenów", level=1)
         t_rows = []
         for tok, s in sorted(tokens.items(), key=lambda x: x[1].get("count", 0), reverse=True):
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
-            t_rows.append([tok, f"{s.get('received', 0):.4f}", f"{s.get('sent', 0):.4f}",
-                           f"{net:.4f}", str(s.get("count", 0))])
-        add_data_table(["Token", "Wpływy", "Wypływy", "Saldo", "TX"], t_rows)
+            info = tc.get(tok, {})
+            name = info.get("name", "")
+            rank = f"#{info['rank']}" if info.get("rank") else "—"
+            cat = info.get("category", "")
+            alert = info.get("alert_level", "NORMAL")
+            desc = info.get("description", "")
+            t_rows.append([tok, name, rank, cat,
+                           f"{s.get('received', 0):.4f}", f"{s.get('sent', 0):.4f}",
+                           f"{net:.4f}", str(s.get("count", 0)),
+                           alert, desc])
+        add_data_table(["Token", "Nazwa", "Rank", "Kategoria",
+                        "Wpływy", "Wypływy", "Saldo", "TX",
+                        "Alert", "Opis"], t_rows)
 
     # ── 6. Numery telefonów ──
     phones = r.get("detected_phones", [])
