@@ -436,11 +436,11 @@
 
     if (isExchange) {
       _renderExchangeMeta(r);
-      _renderTokenBreakdown(r);
+      _hide("crypto_token_breakdown_card");
       _hide("crypto_wallets_card");
     } else {
       _hide("crypto_exchange_meta_card");
-      _hide("crypto_token_breakdown_card");
+      _renderTokenBreakdown(r);
     }
 
     // Phone numbers (all sources)
@@ -585,7 +585,7 @@
     };
 
     let html = '<table class="data-table" style="width:100%;font-size:13px"><thead><tr>' +
-      "<th>Token</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>" +
+      "<th>Token</th><th>Nazwa</th><th>Kategoria</th>" +
       '<th style="text-align:right">Wpływy</th><th style="text-align:right">Wypływy</th>' +
       '<th style="text-align:right">Saldo netto</th><th style="text-align:right">TX</th>' +
       "<th>Alert</th><th>Opis</th>" +
@@ -596,7 +596,6 @@
       const netColor = net >= 0 ? "#22c55e" : "#ef4444";
       const info = tc[tok] || {};
       const name = info.name || "—";
-      const rank = info.rank ? `#${info.rank}` : "—";
       const cat = info.category || "—";
       const alert = info.alert_level || "NORMAL";
       const ac = alertColors[alert] || "#94a3b8";
@@ -606,7 +605,6 @@
       html += `<tr>
         <td style="font-weight:600">${_esc(tok)}</td>
         <td>${_esc(name)}</td>
-        <td style="text-align:center">${_esc(rank)}</td>
         <td><span style="font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(100,116,139,.1)">${_esc(cat)}</span></td>
         <td style="text-align:right">${(s.received || 0).toFixed(4)}</td>
         <td style="text-align:right">${(s.sent || 0).toFixed(4)}</td>
@@ -642,7 +640,7 @@
 
     let html = '<div class="h2">Portfel tokenów</div>';
     html += '<table class="data-table" style="width:100%;font-size:12px;margin-bottom:16px"><thead><tr>';
-    html += '<th>Symbol</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>';
+    html += '<th>Symbol</th><th>Nazwa</th><th>Kategoria</th>';
     html += '<th style="text-align:right">TX</th><th style="text-align:right">Otrzymano</th><th style="text-align:right">Wysłano</th>';
     html += '<th>Alert</th><th>Opis</th>';
     html += '</tr></thead><tbody>';
@@ -651,7 +649,6 @@
       const t = tokens[sym] || {};
       const info = tc[sym] || {};
       const name = info.name || "—";
-      const rank = info.rank ? `#${info.rank}` : "—";
       const cat = info.category || "—";
       const alert = info.alert_level || "NORMAL";
       const ac = alertColors[alert] || "#94a3b8";
@@ -662,7 +659,6 @@
       html += `<tr>`;
       html += `<td><b>${_esc(sym)}</b></td>`;
       html += `<td>${_esc(name)}</td>`;
-      html += `<td style="text-align:center">${_esc(rank)}</td>`;
       html += `<td><span style="font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(100,116,139,.1)">${_esc(cat)}</span></td>`;
       html += `<td style="text-align:right">${t.count || 0}</td>`;
       html += `<td style="text-align:right">${(t.received || 0).toFixed(4)}</td>`;
