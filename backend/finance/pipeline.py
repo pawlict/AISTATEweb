@@ -203,6 +203,42 @@ def run_finance_pipeline(
 
     is_stmt, confidence, indicators = is_bank_statement(preview_text[:10000])
     if not is_stmt:
+        # Check if it's a Revolut crypto PDF — can be analysed in AML context
+        try:
+            from backend.crypto.parsers.revolut_crypto_pdf import is_revolut_crypto_pdf, parse_revolut_crypto_for_aml
+            if is_revolut_crypto_pdf(pdf_path):
+                _log("Wykryto PDF Revolut Crypto — parsowanie dla AML pipeline...")
+                parse_result = parse_revolut_crypto_for_aml(pdf_path)
+                if parse_result and parse_result.transactions:
+                    _log(f"Revolut Crypto: {len(parse_result.transactions)} transakcji")
+                    from .classifier import classify_transactions
+                    classified = classify_transactions(parse_result.transactions, parse_result.info)
+                    from .scorer import compute_score
+                    score = compute_score(classified)
+                    _log(f"Score Revolut Crypto: {score.total_score}/100")
+                    result_data = {
+                        "bank": parse_result.bank,
+                        "info": parse_result.info,
+                        "transactions": parse_result.transactions,
+                        "classified": classified,
+                        "score": score,
+                        "parse_result": parse_result,
+                    }
+                    if save_dir:
+                        try:
+                            parsed_dir = save_dir / "parsed"
+                            parsed_dir.mkdir(parents=True, exist_ok=True)
+                            import json
+                            parsed_file = parsed_dir / f"{pdf_path.stem}.json"
+                            parsed_file.write_text(
+                                json.dumps(parse_result.to_dict(), ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
+                        except Exception as e:
+                            _log(f"Nie udało się zapisać wyników: {e}")
+                    return result_data
+        except ImportError:
+            pass
         _log(f"Dokument nie wygląda na wyciąg bankowy (score={confidence})")
         return None
 
