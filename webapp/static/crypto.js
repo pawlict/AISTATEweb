@@ -1282,6 +1282,15 @@
               || t.includes("withdraw") || c.includes("withdraw") || t === "send" || t === "outgoing";
         };
       case "high_value_tx": {
+        // Same fiat-aware logic as detection
+        const _fv = tx => { const v = parseFloat((tx.raw || {}).fiat_value); return (!isNaN(v) && v > 0) ? v : 0; };
+        const fiatVals = txs.map(_fv).filter(v => v > 0);
+        const hasFiat = fiatVals.length > txs.length * 0.3;
+        if (hasFiat) {
+          const fiatMean = fiatVals.reduce((s, v) => s + v, 0) / (fiatVals.length || 1);
+          const fiatThreshold = Math.max(fiatMean * 3, 2000);
+          return tx => _fv(tx) > fiatThreshold;
+        }
         const amounts = txs.map(tx => Math.abs(tx.amount || 0)).filter(a => a > 0);
         const mean = amounts.reduce((s, v) => s + v, 0) / (amounts.length || 1);
         const threshold = Math.max(mean * 5, 1000);
@@ -1374,16 +1383,45 @@
       result.deposits_withdrawals = items;
     }
 
-    // 2. High value transactions
+    // 2. High value transactions — use fiat value when available
     {
-      const amounts = txs.map(tx => Math.abs(tx.amount || 0)).filter(a => a > 0);
-      const mean = amounts.reduce((s, v) => s + v, 0) / (amounts.length || 1);
-      const threshold = Math.max(mean * 5, 1000);
-      result.high_value_tx = txs.filter(tx => Math.abs(tx.amount || 0) > threshold).map(tx => ({
-        text: `${(tx.timestamp || "").slice(0, 16)} | ${_fmtCrypto(tx.amount, tx.token)} | ${tx.tx_type || ""}`,
-        html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b style="color:#ef4444">${_fmtCrypto(tx.amount, tx.token || "")}</b> (${_esc(tx.tx_type || "")})`,
-        severity: "warning",
-      }));
+      // Extract fiat value from raw data; fall back to token amount
+      const _fiatVal = (tx) => {
+        const raw = tx.raw || {};
+        const fv = parseFloat(raw.fiat_value);
+        if (!isNaN(fv) && fv > 0) return fv;
+        return 0; // no fiat data
+      };
+      // Collect fiat values where available
+      const fiatValues = txs.map(_fiatVal).filter(v => v > 0);
+      const hasFiat = fiatValues.length > txs.length * 0.3; // at least 30% have fiat
+
+      let highValueTxs;
+      if (hasFiat) {
+        // Fiat-based threshold (e.g. PLN/USD) — use mean * 3 with min 2000
+        const fiatMean = fiatValues.reduce((s, v) => s + v, 0) / (fiatValues.length || 1);
+        const fiatThreshold = Math.max(fiatMean * 3, 2000);
+        highValueTxs = txs.filter(tx => _fiatVal(tx) > fiatThreshold);
+      } else {
+        // Fallback: token amount based (old behavior)
+        const amounts = txs.map(tx => Math.abs(tx.amount || 0)).filter(a => a > 0);
+        const mean = amounts.reduce((s, v) => s + v, 0) / (amounts.length || 1);
+        const threshold = Math.max(mean * 5, 1000);
+        highValueTxs = txs.filter(tx => Math.abs(tx.amount || 0) > threshold);
+      }
+
+      result.high_value_tx = highValueTxs.map(tx => {
+        const raw = tx.raw || {};
+        const fv = parseFloat(raw.fiat_value);
+        const fc = raw.fiat_currency || "";
+        const fiatStr = (!isNaN(fv) && fv > 0) ? ` (${fv.toFixed(2)} ${fc})` : "";
+        return {
+          text: `${(tx.timestamp || "").slice(0, 16)} | ${_fmtCrypto(tx.amount, tx.token)} | ${tx.tx_type || ""}`,
+          html: `${_esc((tx.timestamp || "").slice(0, 16).replace("T"," "))} — <b>${_fmtCrypto(tx.amount, tx.token || "")}</b><span style="color:#ef4444;font-weight:600">${_esc(fiatStr)}</span> (${_esc(tx.tx_type || "")})`,
+          severity: "warning",
+          _fiatValue: fv || 0,
+        };
+      });
     }
 
     // 3. Rapid movement (deposit + withdrawal within 30min)
