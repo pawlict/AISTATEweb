@@ -116,16 +116,20 @@ def is_revolut_crypto_pdf(path) -> bool:
     if not lines:
         return False
 
-    head = "\n".join(lines[:50]).lower()
-    has_revolut = "revolut" in head and (
-        "digital assets" in head
-        or "kryptowalut" in head
-        or "crypto account" in head
-        or "crypto statement" in head
-        or "wyciąg z konta" in head
-        or "wyciag z konta" in head
-    )
-    return has_revolut
+    head = "\n".join(lines[:60]).lower()
+    has_revolut_word = "revolut" in head or "digital assets europe" in head
+    has_crypto_kw = any(kw in head for kw in (
+        "digital assets", "kryptowalut", "crypto account",
+        "crypto statement", "wyciąg z konta", "wyciag z konta",
+    ))
+    if has_revolut_word and has_crypto_kw:
+        return True
+    # Fallback: document type phrase alone (Revolut logo may be image-only)
+    if ("wyciąg z konta kryptowalutowego" in head
+            or "wyciag z konta kryptowalutowego" in head
+            or "crypto account statement" in head):
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------

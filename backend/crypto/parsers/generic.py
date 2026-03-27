@@ -391,17 +391,21 @@ def _extract_pdf_lines(path: Path) -> List[str]:
 
 def _detect_crypto_pdf_format(lines: List[str]) -> str:
     """Detect crypto exchange from PDF text lines."""
-    head = "\n".join(lines[:50]).lower()
+    head = "\n".join(lines[:60]).lower()
     if "binance" in head:
         return "binance_pdf"
-    if "revolut" in head and (
-        "digital assets" in head
-        or "kryptowalut" in head
-        or "crypto account" in head
-        or "crypto statement" in head
-        or "wyciąg z konta" in head
-        or "wyciag z konta" in head
-    ):
+    # Revolut: word "revolut" may be in logo (image) not in text,
+    # so also detect by document type phrases alone
+    if "revolut" in head or "digital assets europe" in head:
+        if any(kw in head for kw in (
+            "digital assets", "kryptowalut", "crypto account",
+            "crypto statement", "wyciąg z konta", "wyciag z konta",
+        )):
+            return "revolut_crypto"
+    # Fallback: detect by document structure even without "revolut" in text
+    if ("wyciąg z konta kryptowalutowego" in head
+            or "wyciag z konta kryptowalutowego" in head
+            or "crypto account statement" in head):
         return "revolut_crypto"
     return ""
 
