@@ -778,7 +778,6 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             nc = "#22c55e" if net >= 0 else "#dc2626"
             info = tc.get(tok, {})
             name = info.get("name", "")
-            rank = f"#{info['rank']}" if info.get("rank") else "—"
             cat = info.get("category", "")
             alert = info.get("alert_level", "NORMAL")
             ac = alert_colors.get(alert, "#94a3b8")
@@ -787,7 +786,6 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
             tooltip = f' title="{risk_note}"' if risk_note else ""
             rows += (f"<tr><td style='font-weight:600'>{_resc(tok)}</td>"
                      f"<td>{_resc(name)}</td>"
-                     f"<td style='text-align:center'>{_resc(rank)}</td>"
                      f"<td><span style='font-size:11px;padding:1px 6px;border-radius:3px;background:#f1f5f9'>{_resc(cat)}</span></td>"
                      f"<td class='num'>{s.get('received', 0):.4f}</td>"
                      f"<td class='num'>{s.get('sent', 0):.4f}</td>"
@@ -798,13 +796,97 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
         sections.append(
             f'<h2>{sn}. Portfel tokenów</h2>'
             f'<table class="data-table"><thead><tr>'
-            f'<th>Token</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>'
+            f'<th>Token</th><th>Nazwa</th><th>Kategoria</th>'
             f'<th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th>'
             f'<th>Alert</th><th>Opis</th>'
             f'</tr></thead><tbody>{rows}</tbody></table>'
         )
 
-    # ── VI. Kontrahenci i transfery ──
+    # ── Charts: Saldo w czasie + Graf przepływu ──
+    charts = r.get("charts", {})
+    graph = r.get("graph", {})
+    balance_data = charts.get("balance_timeline", {})
+    has_balance = bool(balance_data and balance_data.get("labels"))
+    has_graph = bool(graph and graph.get("nodes"))
+    if has_balance or has_graph:
+        sn += 1
+        chart_html = ""
+
+        # Balance timeline chart (Chart.js)
+        if has_balance:
+            import json as _json
+            chart_html += (
+                '<h3>Saldo w czasie</h3>'
+                '<div style="max-width:1060px;margin:0 auto 24px">'
+                '<canvas id="report_balance_chart" width="1060" height="400"></canvas>'
+                '</div>'
+                '<script>'
+                f'var _btData={_json.dumps(balance_data, ensure_ascii=False)};'
+                'document.addEventListener("DOMContentLoaded",function(){'
+                'var c=document.getElementById("report_balance_chart");if(!c)return;'
+                'var colors=["#2563eb","#dc2626","#22c55e","#f59e0b","#8b5cf6","#ec4899","#14b8a6","#f97316","#06b6d4","#84cc16"];'
+                'var ds=(_btData.datasets||[]).map(function(d,i){'
+                'return{label:d.token,data:d.data,borderColor:colors[i%colors.length],backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:0.3};'
+                '});'
+                'new Chart(c,{type:"line",data:{labels:_btData.labels,datasets:ds},'
+                'options:{responsive:true,plugins:{legend:{position:"bottom",labels:{font:{size:10}}}},'
+                'scales:{x:{ticks:{maxTicksLimit:20,font:{size:9}}},y:{ticks:{font:{size:10}}}}}});'
+                '});'
+                '</script>'
+            )
+
+        # Flow graph (simple SVG rendering for static report)
+        if has_graph:
+            nodes = graph.get("nodes", [])
+            edges = graph.get("edges", [])
+            if nodes and edges:
+                risk_colors_map = {"critical": "#dc2626", "high": "#f97316", "medium": "#eab308", "low": "#64748b"}
+                # Layout: simple force-like placement
+                import math
+                n_nodes = len(nodes)
+                node_positions = {}
+                for idx, node in enumerate(nodes):
+                    angle = 2 * math.pi * idx / max(n_nodes, 1)
+                    cx = 400 + 280 * math.cos(angle)
+                    cy = 300 + 200 * math.sin(angle)
+                    node_positions[node["data"]["id"]] = (cx, cy)
+
+                svg_w, svg_h = 800, 600
+                svg_parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
+                             f'style="width:100%;max-width:{svg_w}px;height:auto;background:#fafbfc;border:1px solid #e2e8f0;border-radius:8px">']
+                # Arrowhead marker
+                svg_parts.append('<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">'
+                                 '<polygon points="0 0, 8 3, 0 6" fill="#475569"/></marker></defs>')
+                # Draw edges
+                for edge in edges[:200]:
+                    ed = edge.get("data", {})
+                    src_id = ed.get("source", "")
+                    tgt_id = ed.get("target", "")
+                    if src_id in node_positions and tgt_id in node_positions:
+                        x1, y1 = node_positions[src_id]
+                        x2, y2 = node_positions[tgt_id]
+                        ec = "#ef4444" if ed.get("risk") else "#94a3b8"
+                        sw = min(3, max(0.5, (ed.get("count", 1) or 1) * 0.5))
+                        svg_parts.append(f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
+                                         f'stroke="{ec}" stroke-width="{sw}" marker-end="url(#ah)" opacity="0.6"/>')
+                # Draw nodes
+                for node in nodes:
+                    nd = node.get("data", {})
+                    nid = nd.get("id", "")
+                    if nid in node_positions:
+                        nx, ny = node_positions[nid]
+                        nc = risk_colors_map.get(nd.get("risk_level", "low"), "#64748b")
+                        r_size = min(18, max(8, 8 + (nd.get("tx_count", 0) or 0)))
+                        label = _resc(nd.get("label", nid[:10]))
+                        svg_parts.append(f'<circle cx="{nx:.0f}" cy="{ny:.0f}" r="{r_size}" fill="{nc}" stroke="#fff" stroke-width="1.5" opacity="0.85"/>')
+                        svg_parts.append(f'<text x="{nx:.0f}" y="{ny + r_size + 12:.0f}" text-anchor="middle" '
+                                         f'font-size="9" fill="#334155">{label}</text>')
+                svg_parts.append('</svg>')
+                chart_html += f'<h3>Graf przepływu transakcji</h3>{"".join(svg_parts)}'
+
+        sections.append(f"<h2>{sn}. Wykresy</h2>{chart_html}")
+
+    # ── next. Kontrahenci i transfery ──
     cps = bs.get("counterparties", {})
     pay_cps = fr.get("binance_pay_counterparties", {})
     phones = r.get("detected_phones", [])
@@ -1210,6 +1292,7 @@ def _build_crypto_report_html(r: Dict[str, Any]) -> str:
 <head>
 <meta charset="utf-8">
 <title>Raport Crypto — {_resc(filename)}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 body {{ font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; color: #1e293b; font-size: 14px; }}
 h1 {{ border-bottom: 3px solid #2563eb; padding-bottom: 8px; color: #1e293b; }}
@@ -1657,22 +1740,106 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
             net = (s.get("received", 0) or 0) - (s.get("sent", 0) or 0)
             info = tc.get(tok, {})
             name = info.get("name", "")
-            rank = f"#{info['rank']}" if info.get("rank") else "—"
             cat = info.get("category", "")
             alert = info.get("alert_level", "NORMAL")
             desc = info.get("description", "")
-            t_rows.append([tok, name, rank, cat,
+            t_rows.append([tok, name, cat,
                            f"{s.get('received', 0):.4f}", f"{s.get('sent', 0):.4f}",
                            f"{net:.4f}", str(s.get("count", 0)),
                            alert, desc])
-        add_data_table(["Token", "Nazwa", "Rank", "Kategoria",
+        add_data_table(["Token", "Nazwa", "Kategoria",
                         "Wpływy", "Wypływy", "Saldo", "TX",
                         "Alert", "Opis"], t_rows)
 
-    # ── 6. Numery telefonów ──
+    # ── Charts: Saldo w czasie + Graf przepływu ──
+    charts = r.get("charts", {})
+    graph = r.get("graph", {})
+    balance_data = charts.get("balance_timeline", {})
+    has_balance = bool(balance_data and balance_data.get("labels"))
+    has_graph = bool(graph and graph.get("nodes") and graph.get("edges"))
+    if has_balance or has_graph:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import matplotlib.dates as mdates
+
+            doc.add_heading("6. Wykresy", level=1)
+
+            if has_balance:
+                fig, ax = plt.subplots(figsize=(8, 3.5))
+                labels = balance_data["labels"]
+                colors = ["#2563eb", "#dc2626", "#22c55e", "#f59e0b", "#8b5cf6",
+                          "#ec4899", "#14b8a6", "#f97316", "#06b6d4", "#84cc16"]
+                for i, ds in enumerate(balance_data.get("datasets", [])):
+                    ax.plot(range(len(labels)), ds["data"],
+                            label=ds.get("token", "?"),
+                            color=colors[i % len(colors)], linewidth=1.2)
+                # Show ~10 x-tick labels
+                step = max(1, len(labels) // 10)
+                ax.set_xticks(range(0, len(labels), step))
+                ax.set_xticklabels([labels[i] for i in range(0, len(labels), step)],
+                                   rotation=45, fontsize=7, ha="right")
+                ax.set_title("Saldo w czasie", fontsize=11, fontweight="bold")
+                ax.legend(fontsize=7, loc="upper left", ncol=3)
+                ax.tick_params(axis="y", labelsize=8)
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                buf = BytesIO()
+                fig.savefig(buf, format="png", dpi=150)
+                plt.close(fig)
+                buf.seek(0)
+                doc.add_picture(buf, width=Cm(16))
+                buf.close()
+
+            if has_graph:
+                import math
+                nodes = graph.get("nodes", [])
+                edges = graph.get("edges", [])
+                risk_cm = {"critical": "#dc2626", "high": "#f97316", "medium": "#eab308", "low": "#64748b"}
+                n_nodes = len(nodes)
+                node_pos = {}
+                for idx, node in enumerate(nodes):
+                    angle = 2 * math.pi * idx / max(n_nodes, 1)
+                    node_pos[node["data"]["id"]] = (math.cos(angle), math.sin(angle))
+
+                fig, ax = plt.subplots(figsize=(7, 5))
+                ax.set_aspect("equal")
+                ax.axis("off")
+                ax.set_title("Graf przepływu transakcji", fontsize=11, fontweight="bold")
+                # Draw edges
+                for edge in edges[:200]:
+                    ed = edge.get("data", {})
+                    s, t = ed.get("source", ""), ed.get("target", "")
+                    if s in node_pos and t in node_pos:
+                        x1, y1 = node_pos[s]
+                        x2, y2 = node_pos[t]
+                        ec = "#ef4444" if ed.get("risk") else "#c0c0c0"
+                        ax.annotate("", xy=(x2, y2), xytext=(x1, y1),
+                                    arrowprops=dict(arrowstyle="->", color=ec, lw=0.6, alpha=0.5))
+                # Draw nodes
+                for node in nodes:
+                    nd = node.get("data", {})
+                    nid = nd.get("id", "")
+                    if nid in node_pos:
+                        x, y = node_pos[nid]
+                        nc = risk_cm.get(nd.get("risk_level", "low"), "#64748b")
+                        ax.plot(x, y, "o", color=nc, markersize=8, markeredgecolor="white", markeredgewidth=0.5)
+                        ax.text(x, y - 0.08, nd.get("label", nid[:8]), ha="center", fontsize=5, color="#334155")
+                fig.tight_layout()
+                buf = BytesIO()
+                fig.savefig(buf, format="png", dpi=150)
+                plt.close(fig)
+                buf.seek(0)
+                doc.add_picture(buf, width=Cm(14))
+                buf.close()
+        except ImportError:
+            pass  # matplotlib not available — skip charts in DOCX
+
+    # ── 7. Numery telefonów ──
     phones = r.get("detected_phones", [])
     if phones:
-        doc.add_heading("6. Zidentyfikowane numery telefonów", level=1)
+        doc.add_heading("7. Zidentyfikowane numery telefonów", level=1)
         p_rows = [[p["number"], p.get("country_name", "?"), p.get("country_iso", "?"),
                     str(p.get("occurrences", 0))] for p in phones]
         add_data_table(["Numer", "Kraj", "ISO", "Wystąpienia"], p_rows)
@@ -1680,7 +1847,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 7. Kontrahenci ──
     cps = bs.get("counterparties", {})
     if cps:
-        doc.add_heading("7. Kontrahenci wewnętrzni", level=1)
+        doc.add_heading("8. Kontrahenci wewnętrzni", level=1)
         c_rows = []
         for uid, c in sorted(cps.items(), key=lambda x: x[1].get("tx_count", 0), reverse=True):
             c_rows.append([uid, str(c.get("tx_count", 0)),
@@ -1692,7 +1859,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     ext_src = fr.get("external_source_addresses", [])
     ext_dst = fr.get("external_dest_addresses", [])
     if ext_src or ext_dst:
-        doc.add_heading("8. Adresy zewnętrzne", level=1)
+        doc.add_heading("9. Adresy zewnętrzne", level=1)
 
         def _nk_docx(addr: str) -> str:
             a = addr.strip()
@@ -1727,7 +1894,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 9. Analiza czasowa ──
     d_ta = fr.get("temporal_analysis", {})
     if d_ta and d_ta.get("active_span_days"):
-        doc.add_heading("9. Analiza czasowa", level=1)
+        doc.add_heading("10. Analiza czasowa", level=1)
         add_kv_table([
             ("Okres aktywności", f"{d_ta.get('active_span_days', 0)} dni"),
             ("Aktywne dni", f"{d_ta.get('active_days', 0)} ({d_ta.get('activity_density', 0)}%)"),
@@ -1743,7 +1910,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 10. Łańcuchy konwersji ──
     d_cc = fr.get("conversion_chains", {})
     if d_cc and d_cc.get("edges"):
-        doc.add_heading("10. Łańcuchy konwersji tokenów", level=1)
+        doc.add_heading("11. Łańcuchy konwersji tokenów", level=1)
         doc.add_paragraph(f"Unikalne pary: {d_cc.get('unique_swap_pairs', 0)}")
         add_data_table(["Z tokenu", "Na token", "Wolumen"],
                        [[e["from"], e["to"], f"{e['volume']:.4f}"] for e in d_cc["edges"]])
@@ -1751,7 +1918,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 11. Structuring ──
     d_sd = fr.get("structuring_detection", {})
     if d_sd.get("alerts"):
-        doc.add_heading("11. Wykrywanie structuringu", level=1)
+        doc.add_heading("12. Wykrywanie structuringu", level=1)
         add_data_table(["Data", "Typ", "Próg", "TX", "Suma"],
                        [[a["date"], a["type"], str(a["threshold"]), str(a["count"]),
                          f"{a['daily_total']:.2f}"] for a in d_sd["alerts"]])
@@ -1759,7 +1926,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 12. Wash trading ──
     d_wt = fr.get("wash_trading", {})
     if d_wt.get("zero_net_markets"):
-        doc.add_heading("12. Wash trading", level=1)
+        doc.add_heading("13. Wash trading", level=1)
         add_data_table(["Rynek", "Wol. brutto", "Poz. netto", "Net%", "Kupno", "Sprzedaż"],
                        [[m["market"], f"{m['gross_volume']:.4f}", f"{m['net_position']:.4f}",
                          f"{m['net_ratio']}%", f"{m['buys']:.4f}", f"{m['sells']:.4f}"]
@@ -1768,7 +1935,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 13. Fiat ramp ──
     d_fa = fr.get("fiat_ramp_analysis", {})
     if d_fa and (d_fa.get("fiat_deposit_count", 0) > 0 or d_fa.get("fiat_withdrawal_count", 0) > 0):
-        doc.add_heading("13. Analiza fiat on/off ramp", level=1)
+        doc.add_heading("14. Analiza fiat on/off ramp", level=1)
         kv = [
             ("Wpłaty fiat", d_fa.get("fiat_deposit_count", 0)),
             ("Wypłaty fiat", d_fa.get("fiat_withdrawal_count", 0)),
@@ -1783,7 +1950,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 14. P2P ──
     d_p2p = fr.get("p2p_analysis", {})
     if d_p2p and d_p2p.get("total_count", 0) > 0:
-        doc.add_heading("14. Analiza P2P", level=1)
+        doc.add_heading("15. Analiza P2P", level=1)
         add_kv_table([
             ("Transakcje P2P", d_p2p["total_count"]),
             ("% aktywności", f"{d_p2p.get('total_pct', 0)}%"),
@@ -1799,7 +1966,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 15. Velocity ──
     d_va = fr.get("velocity_analysis", {})
     if d_va and d_va.get("token_velocities"):
-        doc.add_heading("15. Prędkość przepływu środków", level=1)
+        doc.add_heading("16. Prędkość przepływu środków", level=1)
         add_kv_table([
             ("DEP/WD", f"{d_va.get('deposit_count', 0)}/{d_va.get('withdrawal_count', 0)}"),
             ("Ratio", d_va.get("dep_wd_ratio", 0)),
@@ -1813,7 +1980,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 16. Fee analysis ──
     d_fee = fr.get("fee_analysis", {})
     if d_fee and d_fee.get("fee_paying_tx_count", 0) > 0:
-        doc.add_heading("16. Analiza opłat", level=1)
+        doc.add_heading("17. Analiza opłat", level=1)
         add_kv_table([
             ("TX z opłatami", d_fee["fee_paying_tx_count"]),
             ("Opłaty BNB", f"{d_fee.get('bnb_fee_count', 0)} ({d_fee.get('bnb_fee_ratio', 0)}%)"),
@@ -1826,7 +1993,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 17. Network analysis ──
     d_na = fr.get("network_analysis", {})
     if d_na and d_na.get("networks"):
-        doc.add_heading("17. Analiza sieci blockchain", level=1)
+        doc.add_heading("18. Analiza sieci blockchain", level=1)
         add_data_table(["Sieć", "Wpłaty", "Wypłaty", "TX", "Wol. wpłat", "Wol. wypłat"],
                        [[n["network"], str(n["deposits"]), str(n["withdrawals"]),
                          str(n["total_tx"]), f"{n['dep_volume']:.4f}", f"{n['wd_volume']:.4f}"]
@@ -1835,7 +2002,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 18. Extended security ──
     d_es = fr.get("extended_security", {})
     if d_es:
-        doc.add_heading("18. Rozszerzona analiza bezpieczeństwa", level=1)
+        doc.add_heading("19. Rozszerzona analiza bezpieczeństwa", level=1)
         add_kv_table([
             ("Kraje logowań", ", ".join(d_es.get("login_countries", []))),
             ("Podejrzane dni VPN", d_es.get("vpn_suspect_days", 0)),
@@ -1851,7 +2018,7 @@ def _build_crypto_report_docx(r: Dict[str, Any]) -> bytes:
     # ── 19. Transakcje ──
     txs = r.get("transactions", [])
     if txs:
-        doc.add_heading("19. Transakcje", level=1)
+        doc.add_heading("20. Transakcje", level=1)
         doc.add_paragraph(f"Łącznie: {len(txs)}")
         tx_rows = []
         for tx in txs:
