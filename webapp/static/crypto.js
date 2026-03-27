@@ -372,6 +372,16 @@
       let html = "";
       if (isExchange) {
         const em = r.exchange_meta || {};
+        const meta = r.metadata || {};
+        const ai = ((r.forensic_report || {}).account_info) || {};
+        const holder = ai.holder_name || meta.account_holder;
+        if (holder) html += `<div class="crypto-info-row"><b>Właściciel:</b> ${_esc(holder)}</div>`;
+        const street = ai.physical_address || meta.street;
+        const city = ai.city || meta.city;
+        const zip = ai.zip_code || meta.postal_code;
+        const country = ai.country || meta.country;
+        const addrParts = [street, zip, city, country].filter(Boolean);
+        if (addrParts.length) html += `<div class="crypto-info-row"><b>Adres:</b> ${_esc(addrParts.join(", "))}</div>`;
         if (em.exchange_name || r.source) html += `<div class="crypto-info-row"><b>Giełda:</b> ${_esc(em.exchange_name || r.source)}</div>`;
         if (r.filename) html += `<div class="crypto-info-row"><b>Plik:</b> ${_esc(r.filename)}</div>`;
         const dateFrom = (r.date_from || "").slice(0, 10);
@@ -1395,9 +1405,18 @@
       result.burst_activity = items;
     }
 
-    // 6. New / unknown tokens
+    // 6. New / unknown tokens — use backend token_classification if available
     {
-      const knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+      const tc = r.token_classification || {};
+      const tcKeys = Object.keys(tc);
+      let knownTokens;
+      if (tcKeys.length) {
+        // Backend classified tokens — use that (known=true means recognized)
+        knownTokens = new Set(tcKeys.filter(s => tc[s] && tc[s].known).map(s => s.toUpperCase()));
+      } else {
+        // Fallback — hardcoded minimal set
+        knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+      }
       const unknownTxs = txs.filter(tx => tx.token && !knownTokens.has(tx.token.toUpperCase()));
       const byToken = {};
       for (const tx of unknownTxs) {
@@ -1406,10 +1425,14 @@
         byToken[tok].count++;
         byToken[tok].total += Math.abs(tx.amount || 0);
       }
-      result.new_token = Object.entries(byToken).map(([tok, d]) => ({
-        html: `Token <b>${_esc(tok)}</b>: ${d.count} transakcji, wolumen ${d.total.toFixed(4)}`,
-        severity: "info",
-      }));
+      result.new_token = Object.entries(byToken).map(([tok, d]) => {
+        const info = tc[tok] || {};
+        const nameStr = info.name ? ` (${_esc(info.name)})` : "";
+        return {
+          html: `Token <b>${_esc(tok)}</b>${nameStr}: ${d.count} transakcji, wolumen ${d.total.toFixed(4)}`,
+          severity: "info",
+        };
+      });
     }
 
     // 7. Cross-chain / bridge
