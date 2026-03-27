@@ -3181,8 +3181,7 @@ async def api_translation_translate(
     ]
 
     env = {
-        # Prefer offline behaviour: if model is not cached, worker will fail fast.
-        "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE", "1"),
+        # Worker checks model cache and enables online download if needed.
         "HF_HUB_DISABLE_TELEMETRY": os.environ.get("HF_HUB_DISABLE_TELEMETRY", "1"),
         # Ensure local imports (backend.*) work in subprocess even without PYTHONPATH set.
         "PYTHONPATH": os.environ.get("PYTHONPATH", str(ROOT)),
