@@ -6292,12 +6292,19 @@ def api_save_notes(project_id: str, payload: Dict[str, Any]) -> Any:
     if not isinstance(blocks, dict):
         blocks = {}
     
-    # Clean blocks: only str->str with non-empty values
-    clean_blocks: Dict[str, str] = {}
+    # Clean blocks: accept str or {text, tags} values
+    clean_blocks: Dict[str, Any] = {}
     for k, v in blocks.items():
-        if isinstance(k, str) and isinstance(v, str) and v.strip():
-            clean_blocks[k.strip()] = v.strip()
-    
+        k = str(k).strip()
+        if not k:
+            continue
+        if isinstance(v, str) and v.strip():
+            clean_blocks[k] = v.strip()
+        elif isinstance(v, dict):
+            txt = str(v.get("text", "") or "").strip()
+            if txt:
+                clean_blocks[k] = {"text": txt, "tags": v.get("tags", [])}
+
     clean_notes = {
         "global": global_note.strip(),
         "blocks": clean_blocks
@@ -6442,12 +6449,19 @@ def api_save_notes_transcription(project_id: str, request: Request) -> Any:
     if not isinstance(blocks, dict):
         blocks = {}
     
-    # Clean blocks: only str->str with non-empty values
-    clean_blocks: Dict[str, str] = {}
+    # Clean blocks: accept str or {text, tags} values
+    clean_blocks: Dict[str, Any] = {}
     for k, v in blocks.items():
-        if isinstance(k, str) and isinstance(v, str) and v.strip():
-            clean_blocks[k.strip()] = v.strip()
-    
+        k = str(k).strip()
+        if not k:
+            continue
+        if isinstance(v, str) and v.strip():
+            clean_blocks[k] = v.strip()
+        elif isinstance(v, dict):
+            txt = str(v.get("text", "") or "").strip()
+            if txt:
+                clean_blocks[k] = {"text": txt, "tags": v.get("tags", [])}
+
     clean_notes = {
         "global": global_note.strip(),
         "blocks": clean_blocks
@@ -6545,12 +6559,19 @@ def api_save_notes_diarization(project_id: str, request: Request) -> Any:
     if not isinstance(blocks, dict):
         blocks = {}
     
-    # Clean blocks: only str->str with non-empty values
-    clean_blocks: Dict[str, str] = {}
+    # Clean blocks: accept str or {text, tags} values
+    clean_blocks: Dict[str, Any] = {}
     for k, v in blocks.items():
-        if isinstance(k, str) and isinstance(v, str) and v.strip():
-            clean_blocks[k.strip()] = v.strip()
-    
+        k = str(k).strip()
+        if not k:
+            continue
+        if isinstance(v, str) and v.strip():
+            clean_blocks[k] = v.strip()
+        elif isinstance(v, dict):
+            txt = str(v.get("text", "") or "").strip()
+            if txt:
+                clean_blocks[k] = {"text": txt, "tags": v.get("tags", [])}
+
     clean_notes = {
         "global": global_note.strip(),
         "blocks": clean_blocks
