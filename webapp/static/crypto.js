@@ -1319,7 +1319,15 @@
         return () => false;
       }
       case "new_token": {
-        const knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+        // Use backend token_classification — same logic as anomaly detection
+        const tc = (_lastResult || {}).token_classification || {};
+        const tcKeys = Object.keys(tc);
+        let knownTokens;
+        if (tcKeys.length) {
+          knownTokens = new Set(tcKeys.filter(s => tc[s] && tc[s].known).map(s => s.toUpperCase()));
+        } else {
+          knownTokens = new Set(["BTC", "ETH", "USDT", "USDC", "BNB", "XRP", "ADA", "SOL", "DOGE", "DOT", "MATIC", "AVAX", "LINK", "DAI", "BUSD", "EUR", "USD", "PLN", "GBP"]);
+        }
         return tx => tx.token && !knownTokens.has(tx.token.toUpperCase());
       }
       case "cross_chain": {
