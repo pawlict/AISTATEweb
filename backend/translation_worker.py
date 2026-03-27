@@ -139,8 +139,17 @@ def main() -> int:
     progress(5)
     eprint(f"translate: init NLLB model='{nllb_model}' mode={mode}")
 
-    # Load translator
-    tr = HybridTranslator(nllb_model=nllb_model)
+    # Load translator (model loading can take a while on first run)
+    progress(7)
+    eprint("translate: loading tokenizer...")
+    try:
+        tr = HybridTranslator(nllb_model=nllb_model)
+    except Exception as e:
+        eprint(f"translate: model load FAILED: {e}")
+        eprint("translate: hint - try running a 'fast' translation first to warm up the model cache")
+        raise
+    progress(15)
+    eprint("translate: model loaded successfully")
 
     # Optional glossary (term dictionary)
     glossary: Dict[str, Any] = {}

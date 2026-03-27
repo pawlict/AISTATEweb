@@ -79,22 +79,29 @@ class HybridTranslator:
 
         logger.info(f"Loading NLLB model: {nllb_model}")
         logger.info(f"Device: {self.device}")
-        
+
         # Load NLLB
         try:
+            import time as _time
+            _t0 = _time.time()
             # Prefer the "slow" tokenizer for NLLB because some Transformers versions
             # do not expose `lang_code_to_id` on the Fast tokenizer wrapper.
+            logger.info("Loading tokenizer...")
             try:
                 self.tokenizer = AutoTokenizer.from_pretrained(nllb_model, use_fast=False)
             except Exception:
                 logger.warning("Falling back to fast tokenizer for NLLB")
                 self.tokenizer = AutoTokenizer.from_pretrained(nllb_model)
+            logger.info(f"Tokenizer loaded in {_time.time()-_t0:.1f}s, loading model weights...")
+            _t1 = _time.time()
             self.model = AutoModelForSeq2SeqLM.from_pretrained(nllb_model)
-            
+            logger.info(f"Model weights loaded in {_time.time()-_t1:.1f}s")
+
             if self.device != "cpu":
+                logger.info(f"Moving model to {self.device}...")
                 self.model = self.model.to(self.device)
-            
-            logger.info("NLLB model loaded successfully")
+
+            logger.info(f"NLLB model ready (total: {_time.time()-_t0:.1f}s)")
         except Exception as e:
             logger.error(f"Failed to load NLLB model: {e}")
             raise
