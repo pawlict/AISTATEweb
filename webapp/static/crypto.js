@@ -579,19 +579,41 @@
     if (!Object.keys(tokens).length) { _hide("crypto_exchange_meta_card"); return; }
     _show("crypto_exchange_meta_card");
 
+    const tc = r.token_classification || {};
+    const alertColors = {
+      "CRITICAL": "#dc2626", "HIGH": "#f97316", "MEDIUM": "#eab308", "NORMAL": "#22c55e"
+    };
+
     let html = '<table class="data-table" style="width:100%;font-size:13px"><thead><tr>' +
-      "<th>Token</th><th>Wpływy</th><th>Wypływy</th><th>Saldo netto</th><th>TX</th>" +
+      "<th>Token</th><th>Nazwa</th><th>Rank</th><th>Kategoria</th>" +
+      '<th style="text-align:right">Wpływy</th><th style="text-align:right">Wypływy</th>' +
+      '<th style="text-align:right">Saldo netto</th><th style="text-align:right">TX</th>' +
+      "<th>Alert</th><th>Opis</th>" +
       "</tr></thead><tbody>";
     const sorted = Object.entries(tokens).sort((a, b) => b[1].count - a[1].count);
     for (const [tok, s] of sorted) {
       const net = (s.received || 0) - (s.sent || 0);
       const netColor = net >= 0 ? "#22c55e" : "#ef4444";
+      const info = tc[tok] || {};
+      const name = info.name || "—";
+      const rank = info.rank ? `#${info.rank}` : "—";
+      const cat = info.category || "—";
+      const alert = info.alert_level || "NORMAL";
+      const ac = alertColors[alert] || "#94a3b8";
+      const desc = info.description || (info.known === false ? "Token spoza bazy TOP 200" : "");
+      const riskNote = info.risk_note || "";
+      const tooltip = riskNote ? ` title="${_esc(riskNote)}"` : "";
       html += `<tr>
         <td style="font-weight:600">${_esc(tok)}</td>
+        <td>${_esc(name)}</td>
+        <td style="text-align:center">${_esc(rank)}</td>
+        <td><span style="font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(100,116,139,.1)">${_esc(cat)}</span></td>
         <td style="text-align:right">${(s.received || 0).toFixed(4)}</td>
         <td style="text-align:right">${(s.sent || 0).toFixed(4)}</td>
         <td style="text-align:right;color:${netColor};font-weight:600">${net >= 0 ? "+" : ""}${net.toFixed(4)}</td>
         <td style="text-align:center">${s.count}</td>
+        <td${tooltip}><span style="color:${ac};font-weight:600;font-size:11px">${_esc(alert)}</span></td>
+        <td style="font-size:11px;color:var(--text-muted,#64748b);max-width:300px">${_esc(desc)}</td>
       </tr>`;
     }
     html += "</tbody></table>";
