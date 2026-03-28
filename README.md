@@ -1,13 +1,16 @@
-# AISTATEweb (3.7.2 beta)
+# AISTATEweb Community (3.7.2 beta)
+
+🇬🇧 [English](README.md) | 🇵🇱 [Polski](README.pl.md) | 🇰🇷 [한국어](README.ko.md)
 
 ![Version](https://img.shields.io/badge/Version-3.7.2%20beta-orange)
+![Edition](https://img.shields.io/badge/Edition-Community-blue)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 * * *
 
-AISTATE Web is a web-based transcription and diarization tool with a project workflow.
+AISTATEweb Community is a web-based tool for audio transcription, speaker diarization, translation, AI-powered analysis, and structured reporting — fully offline, running on local hardware.
 
 #### Feedback / Support
 
@@ -40,7 +43,7 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 - Transformation of raw speech and text into structured insights
 - Support for analytical reports and intelligence-oriented workflows
 
-### 📱 GSM / BTS Analysis (NEW)
+### 📱 GSM / BTS Analysis
 - Import and analysis of **GSM billing data** (CSV, XLSX, PDF)
 - Interactive **map visualization** of BTS locations (Leaflet + OpenStreetMap)
 - **Offline maps** support via MBTiles (raster PNG/JPG/WebP + vector PBF via MapLibre GL)
@@ -52,7 +55,7 @@ If you have any issues, suggestions, or feature requests, please contact me at: 
 - Contact graph, activity heatmap, top contacts analysis
 - Timeline player with month/day animation
 
-### 💰 AML — Financial Analysis (NEW)
+### 💰 AML — Financial Analysis
 - **Anti-Money Laundering** analysis pipeline for bank statements
 - Automatic bank detection and PDF parsing for Polish banks:
   PKO BP, ING, mBank, Pekao SA, Santander, Millennium, Revolut (+ generic fallback)
@@ -128,20 +131,19 @@ Diarization uses **pyannote.audio** pipelines hosted on the **Hugging Face Hub**
 ### Step-by-step (token + permissions)
 
   1. Create / sign in to your Hugging Face account.
-  2. Open the required pyannote model pages and click **“Agree / Accept”** (user conditions).  
+  2. Open the required pyannote model pages and click **"Agree / Accept"** (user conditions).
      Typical models you may need to accept (depending on version):
      * `pyannote/segmentation` (or `pyannote/segmentation-3.0`)
      * `pyannote/speaker-diarization` (or `pyannote/speaker-diarization-3.1`)
   3. Go to your Hugging Face **Settings → Access Tokens** and create a new token with role **READ**.
   4. Paste the token into AISTATE Web settings (or provide it as an environment variable — depending on your setup).
 * * *
-## Program installation linuks 
+## Installation (Linux)
 
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
 curl -fsSL https://ollama.com/install.sh | sh
-
 ```
 ```
 mkdir -p ~/projects
@@ -244,8 +246,9 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - [NLLB-200 (Meta)](https://huggingface.co/facebook/nllb-200-distilled-600M)
 - [Ollama](https://ollama.com/)
 
+---
 
-“This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+"This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md."
 
 ## beta 3.7.2
 - **Analyst panel** — new sidebar panel replacing notes sidebar in transcription and diarization pages
@@ -289,12 +292,12 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 
 ## beta 3.5.0 (SQLite)
 - JSON -> SQLite migration
- 
-## beta 3.4.0 
+
+## beta 3.4.0
 - Added multiuser
 
 ## beta 3.2.3 (translation update)
-- Added Translation module 
+- Added Translation module
 - Added NLLB Settings page
 - Added the ability to change task priorities
 - Added Chat LLM
@@ -317,7 +320,7 @@ When multiple GPU tasks start concurrently, it can lead to:
 - No changes in the functional layout of existing tabs.
 - Only GPU admission/coordination and admin labeling were updated.
 
-## beta 2.1 -2.2 
+## beta 2.1 -2.2
 
 - Change of block editing methodology
 - This update focuses on improving observability and usability of application logs.
