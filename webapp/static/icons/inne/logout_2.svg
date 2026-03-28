@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<defs><linearGradient id="lb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#9a1a1a"/><stop offset="100%" stop-color="#a33d08"/></linearGradient><filter id="slb"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+<path d="M4 44 Q14 41 24 43 Q34 45 44 42" stroke="#9a1a1a" stroke-width="1" fill="none" opacity=".18"/>
+<!-- power symbol circle -->
+<path d="M16 12c-6 4-10 10-10 16 0 10 8 18 18 18s18-8 18-18c0-6-4-12-10-16" stroke="url(#lb)" stroke-width="2.8" fill="none" filter="url(#slb)"/>
+<!-- power line -->
+<line x1="24" y1="4" x2="24" y2="22" stroke="#9a1a1a" stroke-width="3.5"/>
+</svg>

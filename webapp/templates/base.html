@@ -102,23 +102,22 @@
 
       {% if multiuser and user %}
       <div class="user-panel" id="userPanel">
-        <div class="user-panel-header" id="userBadge">
-          <div class="user-panel-avatar">{{ (user.display_name or user.username)[:2]|upper }}</div>
+        <div class="user-panel-header">
+          <img class="user-panel-avatar" src="/static/icons/avatars/{{ user.avatar or 'avatar_shield' }}.svg" alt="" draggable="false">
           <div class="user-panel-info">
             <div class="user-panel-name">{{ user.display_name or user.username }}</div>
             <div class="user-panel-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
           </div>
-          <!-- Collapsed-only: logout icon -->
+          <button class="user-panel-logout-btn" id="btnLogout" type="button" data-i18n-title="auth.logout" title="Wyloguj">
+            <img src="/static/icons/inne/logout_2.svg" alt="Logout" width="20" height="20" draggable="false">
+          </button>
+          <!-- Collapsed-only: same logout icon -->
           <button class="user-badge-compact-logout" id="btnLogoutCompact" type="button" title="Wyloguj / Logout">
-            <svg viewBox="0 0 48 48" width="20" height="20" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <defs><linearGradient id="mlo" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs>
-              <path d="M16 40H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4h6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
-              <path d="M24 24h18" stroke="url(#mlo)" stroke-width="2.5"/>
-              <path d="M36 18l6 6-6 6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
-            </svg>
+            <img src="/static/icons/inne/logout_2.svg" alt="Logout" width="20" height="20" draggable="false">
           </button>
         </div>
-        <div class="user-panel-body" id="userBadgeMenu">
+        <div class="user-panel-settings-label" id="userSettingsToggle" data-i18n="nav.settings">Ustawienia</div>
+        <div class="user-panel-body collapsed" id="userSettingsMenu">
           <div class="user-panel-row">
             <span class="user-panel-icon">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -152,9 +151,9 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span data-i18n="auth.change_password">Zmień hasło</span>
           </button>
-          <button class="user-panel-action user-panel-logout" id="btnLogout">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span data-i18n="auth.logout">Wyloguj</span>
+          <button class="user-panel-action" id="btnChangeAvatar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span data-i18n="auth.change_avatar">Zmień avatar</span>
           </button>
         </div>
       </div>
@@ -162,6 +161,7 @@
 
       <nav class="nav">
         {% if not multiuser or 'projects' in user_modules %}
+        <div class="nav-section" data-i18n="nav.workspace">Przestrzeń robocza</div>
         <a href="/projects" data-icon="projects" class="{{ 'active' if active == 'projects' else '' }}" data-i18n-title="nav.new_project">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -673,23 +673,20 @@
       });
     })();
 
-    // User panel toggle (expand/collapse body)
+    // Settings toggle (double-click to expand/collapse)
     (function(){
-      var header = document.getElementById('userBadge');
-      var body = document.getElementById('userBadgeMenu');
-      if (header && body) {
-        header.addEventListener('click', function(e) {
-          if (e.target.closest('.user-panel-action') || e.target.closest('.user-panel-select') || e.target.closest('.theme-toggle-btn')) return;
+      var toggle = document.getElementById('userSettingsToggle');
+      var menu = document.getElementById('userSettingsMenu');
+      if (toggle && menu) {
+        toggle.addEventListener('dblclick', function(e) {
           if (document.body.classList.contains('sidebar-collapsed')) return;
-          body.classList.toggle('collapsed');
+          menu.classList.toggle('collapsed');
         });
       }
       /* Language switcher (dropdown) — save to account, update localStorage, reload */
       var langSel = document.getElementById('userLangSelect');
       if (langSel) {
-        langSel.addEventListener('click', function(e){ e.stopPropagation(); });
         langSel.addEventListener('change', function(e) {
-          e.stopPropagation();
           var lang = langSel.value;
           localStorage.setItem('aistate_ui_lang', lang);
           fetch('/api/auth/language', {
@@ -720,23 +717,17 @@
       function _clearProjectState() {
         ['aistate_project_id','aistate_audio_file','aistate_workspace_id','aistate_subproject_name','aistate_last_task_id'].forEach(function(k){ localStorage.removeItem(k); });
       }
-      var logoutBtn = document.getElementById('btnLogout');
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', async function() {
-          await fetch('/api/auth/logout', {method:'POST'});
-          _clearProjectState();
-          location.href = '/login';
-        });
-      }
-      var logoutCompact = document.getElementById('btnLogoutCompact');
-      if (logoutCompact) {
-        logoutCompact.addEventListener('click', async function(e) {
+      /* Logout (header icon + compact) */
+      document.querySelectorAll('#btnLogout, #btnLogoutCompact').forEach(function(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', async function(e) {
           e.stopPropagation();
           await fetch('/api/auth/logout', {method:'POST'});
           _clearProjectState();
           location.href = '/login';
         });
-      }
+      });
+      /* Change password */
       var changePwBtn = document.getElementById('btnChangePassword');
       if (changePwBtn) {
         changePwBtn.addEventListener('click', function() {
@@ -754,7 +745,110 @@
           }).catch(() => showToast('Connection error', 'error'));
         });
       }
+      /* Change avatar — open modal with grid */
+      var changeAvatarBtn = document.getElementById('btnChangeAvatar');
+      if (changeAvatarBtn) {
+        changeAvatarBtn.addEventListener('click', function() {
+          _openAvatarPicker('{{ user.avatar or "avatar_shield" }}', function(chosen) {
+            fetch('/api/auth/avatar', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({avatar: chosen}),
+            }).then(function(r){ return r.json(); }).then(function(d) {
+              if (d.status === 'ok') {
+                var img = document.querySelector('.user-panel-avatar');
+                if (img) img.src = '/static/icons/avatars/' + chosen + '.svg';
+                showToast(t('auth.avatar_changed') !== 'auth.avatar_changed' ? t('auth.avatar_changed') : 'Avatar changed', 'success');
+              }
+            }).catch(function(){ showToast('Error', 'error'); });
+          });
+        });
+      }
     })();
+
+    /* Avatar picker modal (shared between register + settings) */
+    function _openAvatarPicker(currentAvatar, onSelect) {
+      var existing = document.getElementById('avatarPickerModal');
+      if (existing) existing.remove();
+
+      var avatars = [
+        'avatar_anchor','avatar_atom','avatar_blackhole','avatar_brain','avatar_bridge',
+        'avatar_circuit','avatar_code','avatar_compass','avatar_crown','avatar_cyberpunk',
+        'avatar_darkside','avatar_diamond','avatar_dna','avatar_dragon','avatar_energy',
+        'avatar_eye_fire','avatar_fingerprint','avatar_flame','avatar_frost','avatar_galaxy',
+        'avatar_glitch','avatar_hex','avatar_imperial','avatar_lightning','avatar_matrix',
+        'avatar_mountain','avatar_music','avatar_mystic','avatar_neon','avatar_neural',
+        'avatar_radar','avatar_rebel','avatar_saber_blue','avatar_saber_green','avatar_saber_red',
+        'avatar_samurai','avatar_scope','avatar_shield','avatar_skull','avatar_solar',
+        'avatar_spartan','avatar_stargate','avatar_stars','avatar_stealth','avatar_tactical',
+        'avatar_toxic','avatar_vinyl','avatar_warp','avatar_wave','avatar_wolf','avatar_wormhole'
+      ];
+
+      var overlay = document.createElement('div');
+      overlay.id = 'avatarPickerModal';
+      overlay.className = 'confirm-overlay';
+
+      var box = document.createElement('div');
+      box.className = 'confirm-box avatar-picker-box';
+
+      var title = document.createElement('div');
+      title.className = 'avatar-picker-title';
+      title.textContent = t('auth.choose_avatar') !== 'auth.choose_avatar' ? t('auth.choose_avatar') : 'Wybierz avatar';
+
+      var closeBtn = document.createElement('button');
+      closeBtn.className = 'confirm-close';
+      closeBtn.type = 'button';
+      closeBtn.innerHTML = '<img src="/static/icons/akcje/close.svg" alt="close" width="18" height="18">';
+
+      var grid = document.createElement('div');
+      grid.className = 'avatar-grid';
+
+      var selected = currentAvatar;
+
+      avatars.forEach(function(name) {
+        var btn = document.createElement('button');
+        btn.className = 'avatar-grid-item' + (name === currentAvatar ? ' active' : '');
+        btn.type = 'button';
+        btn.title = name.replace('avatar_', '').replace(/_/g, ' ');
+        btn.innerHTML = '<img src="/static/icons/avatars/' + name + '.svg" alt="" width="40" height="40" draggable="false">';
+        btn.addEventListener('click', function() {
+          grid.querySelectorAll('.avatar-grid-item').forEach(function(b){ b.classList.remove('active'); });
+          btn.classList.add('active');
+          selected = name;
+        });
+        grid.appendChild(btn);
+      });
+
+      var okBtn = document.createElement('button');
+      okBtn.className = 'confirm-btn confirm-btn-ok';
+      okBtn.type = 'button';
+      okBtn.innerHTML = '<img src="/static/icons/akcje/accept.svg" alt="" width="16" height="16"><span>' + (t('common.confirm') !== 'common.confirm' ? t('common.confirm') : 'OK') + '</span>';
+
+      var footer = document.createElement('div');
+      footer.className = 'confirm-buttons';
+      footer.appendChild(okBtn);
+
+      box.appendChild(closeBtn);
+      box.appendChild(title);
+      box.appendChild(grid);
+      box.appendChild(footer);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      requestAnimationFrame(function(){ overlay.classList.add('confirm-visible'); });
+
+      function close() {
+        overlay.classList.remove('confirm-visible');
+        setTimeout(function(){ overlay.remove(); }, 200);
+      }
+
+      closeBtn.addEventListener('click', close);
+      overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+      okBtn.addEventListener('click', function() {
+        close();
+        if (onSelect) onSelect(selected);
+      });
+    }
     {% endif %}
   })();
 </script>

@@ -3096,15 +3096,8 @@ button.pill-icon:hover{
 .user-panel-avatar{
   width:34px; height:34px;
   border-radius:50%;
-  background:linear-gradient(135deg, var(--accent,#4a6cf7), #7c3aed);
-  color:#fff;
-  font-size:.72rem;
-  font-weight:700;
-  display:flex;
-  align-items:center;
-  justify-content:center;
   flex-shrink:0;
-  letter-spacing:.02em;
+  object-fit:contain;
 }
 
 .user-panel-info{
@@ -3240,15 +3233,97 @@ button.pill-icon:hover{
 .user-panel-action:hover{ background:rgba(0,0,0,.04); }
 .user-panel-action svg{ flex-shrink:0; color:var(--muted,#888); }
 
-.user-panel-logout{ color:#e74c3c; }
-.user-panel-logout svg{ color:#e74c3c; stroke:#e74c3c; }
-.user-panel-logout:hover{ background:#fef2f2; }
+/* Logout icon button in header row */
+.user-panel-logout-btn{
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:4px;
+  border-radius:6px;
+  opacity:.55;
+  transition:opacity .15s, background .15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.user-panel-logout-btn:hover{
+  opacity:1;
+  background:rgba(231,76,60,.08);
+}
+
+/* Settings label (styled like nav-section, with logo gradient hover) */
+.user-panel-settings-label{
+  margin:0;
+  padding:6px 12px 2px;
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--muted,#888);
+  opacity:.85;
+  cursor:pointer;
+  transition:color .2s;
+  user-select:none;
+}
+.user-panel-settings-label:hover{
+  background:linear-gradient(90deg, #3b82f6, #a855f7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  opacity:1;
+}
+
+/* Avatar picker modal */
+.avatar-picker-box{
+  max-width:520px !important;
+  width:95% !important;
+}
+.avatar-picker-title{
+  font-weight:800;
+  font-size:1rem;
+  text-align:center;
+  margin-bottom:.8rem;
+  color:var(--text,#1a1a2e);
+}
+.avatar-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(52px, 1fr));
+  gap:6px;
+  max-height:340px;
+  overflow-y:auto;
+  padding:4px;
+  margin-bottom:1rem;
+}
+.avatar-grid-item{
+  width:52px; height:52px;
+  border:2px solid transparent;
+  border-radius:10px;
+  background:rgba(0,0,0,.03);
+  cursor:pointer;
+  padding:4px;
+  transition:all .15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.avatar-grid-item:hover{
+  border-color:var(--accent,#4a6cf7);
+  background:rgba(74,108,247,.08);
+}
+.avatar-grid-item.active{
+  border-color:var(--accent,#4a6cf7);
+  background:rgba(74,108,247,.12);
+  box-shadow:0 0 0 2px rgba(74,108,247,.2);
+}
+.avatar-grid-item img{
+  width:40px; height:40px;
+}
 
 /* Compact logout icon — hidden by default (shown only when collapsed) */
 .user-badge-compact-logout{
   display:none;
   background:none; border:none; cursor:pointer;
-  color:#e74c3c; padding:0; margin:0 auto;
+  padding:0; margin:0 auto;
   line-height:0; opacity:.7; transition:opacity .15s;
 }
 .user-badge-compact-logout:hover{ opacity:1; }
@@ -3264,7 +3339,10 @@ body.sidebar-collapsed .user-panel-header{
 body.sidebar-collapsed .user-panel-header:hover{ background:rgba(231,76,60,.08); }
 body.sidebar-collapsed .user-panel-avatar{ display:none; }
 body.sidebar-collapsed .user-panel-info{ display:none; }
-body.sidebar-collapsed .user-panel-body{ display:none !important; }
+body.sidebar-collapsed .user-panel-logout-btn{ display:none; }
+body.sidebar-collapsed .user-panel-settings-label{ display:none; }
+body.sidebar-collapsed .user-panel-body,
+body.sidebar-collapsed .user-settings-menu{ display:none !important; }
 body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 
 /* ===== Multi-user: modal overlay (shared) ===== */
@@ -4254,9 +4332,29 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   color:var(--text);
 }
 
-/* User panel logout dark */
-[data-theme="dark"] .user-panel-logout:hover{
-  background: rgba(239,68,68,.1);
+/* User panel dark */
+[data-theme="dark"] .user-panel-logout-btn:hover{
+  background: rgba(239,68,68,.12);
+}
+[data-theme="dark"] .user-panel-logout-btn img{
+  filter: invert(.85);
+}
+[data-theme="dark"] .user-panel-settings-label{
+  color: var(--muted);
+}
+[data-theme="dark"] .avatar-grid-item{
+  background: rgba(255,255,255,.04);
+}
+[data-theme="dark"] .avatar-grid-item:hover{
+  background: rgba(74,158,237,.12);
+  border-color: var(--accent);
+}
+[data-theme="dark"] .avatar-grid-item.active{
+  background: rgba(74,158,237,.15);
+  border-color: var(--accent);
+}
+[data-theme="dark"] .avatar-picker-title{
+  color: var(--text);
 }
 
 /* AML module */

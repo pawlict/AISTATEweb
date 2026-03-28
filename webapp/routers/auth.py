@@ -393,7 +393,7 @@ async def set_language(request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
 
     lang = (body.get("language") or "pl").strip().lower()
-    if lang not in ("pl", "en", "ko"):
+    if lang not in ("pl", "en", "ko", "es", "fr", "zh", "uk", "de"):
         lang = "pl"
 
     _user_store.update_user(user.user_id, {"language": lang})
@@ -419,6 +419,29 @@ async def set_theme(request: Request) -> JSONResponse:
 
     _user_store.update_user(user.user_id, {"theme": theme})
     return JSONResponse({"status": "ok", "theme": theme})
+
+
+@router.post("/avatar")
+async def set_avatar(request: Request) -> JSONResponse:
+    """Set the user's avatar icon."""
+    assert _user_store
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return JSONResponse({"status": "error", "message": "Not authenticated"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid request"}, status_code=400)
+
+    avatar = (body.get("avatar") or "avatar_shield").strip()
+    # Validate: must start with avatar_ and contain only safe chars
+    import re
+    if not re.match(r'^avatar_[a-z0-9_]+$', avatar):
+        avatar = "avatar_shield"
+
+    _user_store.update_user(user.user_id, {"avatar": avatar})
+    return JSONResponse({"status": "ok", "avatar": avatar})
 
 
 @router.post("/register")
@@ -470,12 +493,18 @@ async def register(request: Request) -> JSONResponse:
     # Generate recovery phrase
     phrase, phrase_hash, phrase_hint = generate_and_hash()
 
+    avatar = (body.get("avatar") or "avatar_shield").strip()
+    import re as _re
+    if not _re.match(r'^avatar_[a-z0-9_]+$', avatar):
+        avatar = "avatar_shield"
+
     try:
         rec = UserRecord(
             username=username,
             display_name=display_name,
             password_hash=hash_password(password),
             role=None,
+            avatar=avatar,
             pending=True,
             created_by="self",
             password_changed_at=datetime.now().isoformat(),
