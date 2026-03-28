@@ -1,4 +1,8 @@
-# AISTATE Web — 사용자 매뉴얼
+# AISTATE Web Community — 사용자 매뉴얼
+
+> **에디션:** Community (오픈소스) · **버전:** 3.7.2 베타
+>
+> Community 에디션은 개인, 교육 및 연구용으로 제공되는 무료 전체 기능 버전의 AISTATE Web입니다. 전사, 화자분리, 번역, 분석 (LLM, AML, GSM, Crypto), Chat LLM, 보고서 등 모든 모듈이 포함되어 있습니다.
 
 ---
 

@@ -1,4 +1,8 @@
-# Instrukcja obsługi AISTATE Web
+# Instrukcja obsługi AISTATE Web Community
+
+> **Edycja:** Community (open-source) · **Wersja:** 3.7.2 beta
+>
+> Edycja Community jest darmową, w pełni funkcjonalną wersją AISTATE Web przeznaczoną do użytku indywidualnego, edukacyjnego i badawczego. Zawiera wszystkie moduły: transkrypcję, diaryzację, tłumaczenie, analizę (LLM, AML, GSM, Crypto), Chat LLM i raportowanie.
 
 ---
 

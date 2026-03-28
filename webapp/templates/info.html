@@ -49,7 +49,7 @@
     try{
       const url = new URL(window.location.href);
       const ls = (localStorage.getItem("aistate_ui_lang") || localStorage.getItem("ui_language") || localStorage.getItem("lang") || "").toLowerCase();
-      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("ko") ? "ko" : ls.startsWith("pl") ? "pl" : "";
+      const wanted = ls.startsWith("en") ? "en" : ls.startsWith("ko") ? "ko" : ls.startsWith("es") ? "es" : ls.startsWith("fr") ? "fr" : ls.startsWith("pl") ? "pl" : "";
       if (!wanted) return;
       const current = (url.searchParams.get("lang") || "").toLowerCase();
       if (current === wanted) return;

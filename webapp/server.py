@@ -2672,6 +2672,10 @@ def page_info(request: Request) -> Any:
         _info_suffix = "en"
     elif lang.startswith("ko"):
         _info_suffix = "ko"
+    elif lang.startswith("es"):
+        _info_suffix = "es"
+    elif lang.startswith("fr"):
+        _info_suffix = "fr"
     else:
         _info_suffix = "pl"
 
