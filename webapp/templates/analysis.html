@@ -316,12 +316,7 @@
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
 
-  <!-- Empty state (before upload) -->
-  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-  </div>
-
-  <!-- Progress bar (outside panel layout so it's always visible) -->
+  <!-- Progress bar (above empty state) -->
   <div class="an-progress" id="aml_progress">
     <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
     <div class="progress"><div id="aml_bar"></div></div>
@@ -335,6 +330,11 @@
     </div>
     <div id="aml_batch_list" style="margin-top:8px"></div>
     <div id="aml_batch_validation" style="display:none"></div>
+  </div>
+
+  <!-- Empty state (before upload) -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
   </div>
 
   <div class="analyst-panel-layout" id="aml_panel_layout" style="display:none">
@@ -638,15 +638,15 @@
   <!-- GSM Analysis content -->
   <div class="analysis-tab-content" id="gsm_content" style="display:none">
 
-  <!-- Empty state (before upload) -->
-  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-  </div>
-
-  <!-- Progress bar (outside panel layout) -->
+  <!-- Progress bar (above empty state) -->
   <div class="an-progress" id="gsm_progress" style="display:none">
     <div class="small">Status: <b id="gsm_status">—</b></div>
     <div class="progress"><div id="gsm_bar"></div></div>
+  </div>
+
+  <!-- Empty state (before upload) -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
   </div>
 
   <div class="analyst-panel-layout" id="gsm_panel_layout" style="display:none">
@@ -1201,10 +1201,15 @@
   <!-- Crypto Analysis content -->
   <div class="analysis-tab-content" id="crypto_content" style="display:none">
 
-    <!-- Progress bar -->
+    <!-- Progress bar (above empty state) -->
     <div class="an-progress" id="crypto_progress" style="display:none">
       <div class="small">Status: <b id="crypto_status">—</b></div>
       <div class="progress"><div id="crypto_bar"></div></div>
+    </div>
+
+    <!-- Empty state (before upload) -->
+    <div id="crypto_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+      <img src="/static/logo_crypto.png" alt="Moduł Crypto" style="width:70%;max-width:720px;min-width:280px" draggable="false">
     </div>
 
     <!-- Results (with analyst panel) -->
@@ -1547,11 +1552,6 @@
 
       </div><!-- /analyst-panel-main -->
     </div><!-- /crypto_results -->
-
-    <!-- Empty state (before upload) -->
-    <div id="crypto_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-      <img src="/static/logo_crypto.png" alt="Moduł Crypto" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-    </div>
 
   </div><!-- /crypto_content -->
 
