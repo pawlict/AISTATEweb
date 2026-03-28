@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="adr" cx="40%" cy="40%"><stop offset="0%" stop-color="#7c2d12"/><stop offset="100%" stop-color="#1a0a04"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#adr)" stroke="#dc2626" stroke-width="1.5"/>
+<path d="M16 32c-2-4-1-10 3-14 2-2 5-4 8-3" stroke="#fca5a5" stroke-width="1" fill="none" opacity="0.8"/>
+<path d="M32 32c2-4 1-10-3-14-2-2-5-4-8-3" stroke="#fca5a5" stroke-width="1" fill="none" opacity="0.8"/>
+<path d="M14 18c-3-4-2-8 2-10" stroke="#fb923c" stroke-width=".8" fill="none" opacity="0.64"/>
+<path d="M34 18c3-4 2-8-2-10" stroke="#fb923c" stroke-width=".8" fill="none" opacity="0.64"/>
+<path d="M20 16l4-6 4 6" stroke="#fca5a5" stroke-width=".8" fill="#fca5a5" fill-opacity="0.24" opacity="0.64"/>
+<circle cx="20" cy="22" r="1.5" fill="#fb923c" opacity="0.85"/>
+<circle cx="28" cy="22" r="1.5" fill="#fb923c" opacity="0.85"/>
+<path d="M20 28c2 2 6 2 8 0" stroke="#fca5a5" stroke-width=".8" fill="none" opacity="0.64"/>
+<path d="M10 30l-2 4M38 30l2 4" stroke="#fb923c" stroke-width=".7" opacity="0.4"/>
+
+</svg>

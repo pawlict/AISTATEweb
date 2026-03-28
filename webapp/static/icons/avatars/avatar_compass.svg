@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><linearGradient id="aco" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0a1628"/></linearGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#aco)" stroke="#d97706" stroke-width="1.5"/>
+<circle cx="24" cy="24" r="18" stroke="#f59e0b" stroke-width=".6" fill="none" opacity="0.4"/>
+<path d="M24 6l3 14h-6z" fill="#f59e0b" fill-opacity="0.5"/>
+<path d="M24 42l3-14h-6z" fill="#92400e" fill-opacity="0.48"/>
+<path d="M6 24l14 3v-6z" fill="#92400e" fill-opacity="0.48"/>
+<path d="M42 24l-14 3v-6z" fill="#92400e" fill-opacity="0.48"/>
+<circle cx="24" cy="24" r="3" stroke="#f59e0b" stroke-width=".8" fill="none" opacity="0.64"/>
+<circle cx="24" cy="24" r="1" fill="#f59e0b" opacity="0.8"/>
+
+</svg>
