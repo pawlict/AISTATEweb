@@ -27,6 +27,7 @@ class UserRecord:
     show_ban_expiry: bool = True        # Whether to show ban expiry date to user
     language: str = "pl"                 # UI language preference (pl, en)
     theme: str = "light"                 # UI theme preference (light, dark)
+    avatar: str = "avatar_shield"        # Avatar icon filename (without .svg)
     pending: bool = False               # True = waiting for admin approval
     pending_role: Optional[str] = None  # requested role (shown to admin for approval)
     created_at: str = ""
@@ -62,6 +63,7 @@ _AUTH_COLUMNS = [
     ("show_ban_expiry", "INTEGER NOT NULL DEFAULT 1"),
     ("language", "TEXT DEFAULT 'pl'"),
     ("theme", "TEXT DEFAULT 'light'"),
+    ("avatar", "TEXT DEFAULT 'avatar_shield'"),
     ("pending", "INTEGER NOT NULL DEFAULT 0"),
     ("pending_role", "TEXT"),
     ("created_by", "TEXT DEFAULT ''"),
@@ -137,6 +139,7 @@ class UserStore:
         rec.show_ban_expiry = bool(row.get("show_ban_expiry", 1))
         rec.language = row.get("language", "pl") or "pl"
         rec.theme = row.get("theme", "light") or "light"
+        rec.avatar = row.get("avatar", "avatar_shield") or "avatar_shield"
         rec.pending = bool(row.get("pending", 0))
         rec.pending_role = row.get("pending_role")
         rec.created_at = row.get("created_at", "")
@@ -202,12 +205,12 @@ class UserStore:
                     id, username, password_hash, role, display_name,
                     is_admin, admin_roles, is_superadmin,
                     banned, banned_until, ban_reason, show_ban_expiry,
-                    language, theme, pending, pending_role,
+                    language, theme, avatar, pending, pending_role,
                     created_at, created_by, last_login,
                     password_reset_requested, password_reset_requested_at,
                     failed_login_count, locked_until, password_changed_at,
                     recovery_phrase_hash, recovery_phrase_hint, recovery_phrase_pending
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     rec.user_id,
                     rec.username,
@@ -223,6 +226,7 @@ class UserStore:
                     int(rec.show_ban_expiry),
                     rec.language,
                     rec.theme,
+                    rec.avatar,
                     int(rec.pending),
                     rec.pending_role,
                     rec.created_at,

@@ -35,6 +35,11 @@
     .lang-btn { padding: .25rem .6rem; border: 1.5px solid var(--border, #d0d5dd); border-radius: 6px; background: transparent; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted, #888); transition: all .2s; }
     .lang-btn.active { background: var(--accent, #4a6cf7); color: #fff; border-color: var(--accent, #4a6cf7); }
     .lang-btn:hover:not(.active) { border-color: var(--accent, #4a6cf7); color: var(--accent, #4a6cf7); }
+    .avatar-grid-reg { display:grid; grid-template-columns:repeat(auto-fill, minmax(48px,1fr)); gap:5px; max-height:200px; overflow-y:auto; padding:4px; border:1.5px solid var(--border,#d0d5dd); border-radius:8px; margin-top:4px; }
+    .avatar-grid-item { width:48px; height:48px; border:2px solid transparent; border-radius:8px; background:rgba(0,0,0,.03); cursor:pointer; padding:3px; transition:all .15s; display:flex; align-items:center; justify-content:center; }
+    .avatar-grid-item:hover { border-color:var(--accent,#4a6cf7); background:rgba(74,108,247,.08); }
+    .avatar-grid-item.active { border-color:var(--accent,#4a6cf7); background:rgba(74,108,247,.12); box-shadow:0 0 0 2px rgba(74,108,247,.2); }
+    .avatar-grid-item img { width:36px; height:36px; }
   </style>
 </head>
 <body>
@@ -74,6 +79,11 @@
       <div class="field">
         <label for="password2">Powtórz hasło <span class="en">Confirm password</span></label>
         <input type="password" id="password2" autocomplete="new-password" required/>
+      </div>
+      <div class="field">
+        <label>Wybierz avatar <span class="en">Choose avatar</span></label>
+        <div class="avatar-grid-reg" id="regAvatarGrid"></div>
+        <input type="hidden" id="regAvatar" value="avatar_shield"/>
       </div>
       <button type="submit" class="reg-btn" id="regBtn">Zarejestruj się <span class="en">Register</span></button>
       <div class="reg-error" id="regError"></div>
@@ -120,6 +130,37 @@
     btn.addEventListener('click', function() { applyLang(btn.dataset.lang); });
   });
   applyLang(curLang);
+
+  /* Populate avatar grid */
+  var avatars = [
+    'avatar_anchor','avatar_atom','avatar_blackhole','avatar_brain','avatar_bridge',
+    'avatar_circuit','avatar_code','avatar_compass','avatar_crown','avatar_cyberpunk',
+    'avatar_darkside','avatar_diamond','avatar_dna','avatar_dragon','avatar_energy',
+    'avatar_eye_fire','avatar_fingerprint','avatar_flame','avatar_frost','avatar_galaxy',
+    'avatar_glitch','avatar_hex','avatar_imperial','avatar_lightning','avatar_matrix',
+    'avatar_mountain','avatar_music','avatar_mystic','avatar_neon','avatar_neural',
+    'avatar_radar','avatar_rebel','avatar_saber_blue','avatar_saber_green','avatar_saber_red',
+    'avatar_samurai','avatar_scope','avatar_shield','avatar_skull','avatar_solar',
+    'avatar_spartan','avatar_stargate','avatar_stars','avatar_stealth','avatar_tactical',
+    'avatar_toxic','avatar_vinyl','avatar_warp','avatar_wave','avatar_wolf','avatar_wormhole'
+  ];
+  var grid = document.getElementById('regAvatarGrid');
+  var hiddenInput = document.getElementById('regAvatar');
+  if (grid) {
+    avatars.forEach(function(name) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'avatar-grid-item' + (name === 'avatar_shield' ? ' active' : '');
+      btn.title = name.replace('avatar_', '').replace(/_/g, ' ');
+      btn.innerHTML = '<img src="/static/icons/avatars/' + name + '.svg" alt="" width="36" height="36" draggable="false">';
+      btn.addEventListener('click', function() {
+        grid.querySelectorAll('.avatar-grid-item').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        hiddenInput.value = name;
+      });
+      grid.appendChild(btn);
+    });
+  }
 })();
 
 document.getElementById('regForm').addEventListener('submit', async function(e) {
@@ -146,6 +187,7 @@ document.getElementById('regForm').addEventListener('submit', async function(e) 
         username: document.getElementById('username').value.trim(),
         display_name: document.getElementById('display_name').value.trim(),
         password: password,
+        avatar: document.getElementById('regAvatar').value || 'avatar_shield',
       }),
     });
     var data = await res.json();

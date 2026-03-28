@@ -122,6 +122,8 @@ COMMON_ROUTES: Set[str] = {
     "/api/auth/me",
     "/api/auth/change-password",
     "/api/auth/language",
+    "/api/auth/theme",
+    "/api/auth/avatar",
     "/api/auth/my-audit",
     "/api/auth/password-policy",
     "/api/tasks",  # task list (Logs page) — /api/tasks/ prefix covers /api/tasks/{id}
