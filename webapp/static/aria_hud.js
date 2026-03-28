@@ -147,64 +147,96 @@
 
   function _initDrag(el) {
     var startX, startY, startLeft, startTop, dragging = false, moved = false;
+    var downTime = 0;
 
     el.style.touchAction = 'none';
-    // Prevent native click — we handle open/close in onUp
-    el.addEventListener('click', function(e) { e.stopPropagation(); e.preventDefault(); }, true);
 
-    function onDown(e) {
-      if (e.type === 'mousedown' && e.button !== 0) return;
-      var ev = e.touches ? e.touches[0] : e;
+    el.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
       dragging = true;
       moved = false;
-      startX = ev.clientX;
-      startY = ev.clientY;
+      downTime = Date.now();
+      startX = e.clientX;
+      startY = e.clientY;
       var rect = el.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
-    }
+      // Switch to left/top immediately
+      el.style.left = startLeft + 'px';
+      el.style.top = startTop + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      el.style.transition = 'none';
+      e.preventDefault(); // prevent text selection, button focus
+      e.stopPropagation();
+    });
 
-    function onMove(e) {
+    document.addEventListener('mousemove', function(e) {
       if (!dragging) return;
-      var ev = e.touches ? e.touches[0] : e;
-      var dx = ev.clientX - startX;
-      var dy = ev.clientY - startY;
-      if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-      if (!moved) {
-        el.style.left = startLeft + 'px';
-        el.style.top = startTop + 'px';
-        el.style.right = 'auto';
-        el.style.bottom = 'auto';
-        el.style.transition = 'none';
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      if (!moved) return;
+      var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
+      var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
+      el.style.left = newLeft + 'px';
+      el.style.top = newTop + 'px';
+    });
+
+    document.addEventListener('mouseup', function() {
+      if (!dragging) return;
+      dragging = false;
+      el.style.transition = '';
+      if (moved) {
+        _saveTriggerPosition();
+      } else {
+        toggle();
       }
-      moved = true;
+      moved = false;
+    });
+
+    // Touch support
+    el.addEventListener('touchstart', function(e) {
+      var t = e.touches[0];
+      dragging = true;
+      moved = false;
+      startX = t.clientX;
+      startY = t.clientY;
+      var rect = el.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      el.style.left = startLeft + 'px';
+      el.style.top = startTop + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      el.style.transition = 'none';
+    }, {passive: true});
+
+    document.addEventListener('touchmove', function(e) {
+      if (!dragging) return;
+      var t = e.touches[0];
+      var dx = t.clientX - startX;
+      var dy = t.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      if (!moved) return;
       e.preventDefault();
       var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
       var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
       el.style.left = newLeft + 'px';
       el.style.top = newTop + 'px';
-    }
+    }, {passive: false});
 
-    function onUp(e) {
+    document.addEventListener('touchend', function() {
       if (!dragging) return;
       dragging = false;
       el.style.transition = '';
       if (moved) {
-        // Was a drag — save position, don't toggle
         _saveTriggerPosition();
       } else {
-        // Was a click (no movement) — toggle HUD
         toggle();
       }
       moved = false;
-    }
-
-    el.addEventListener('mousedown', onDown);
-    el.addEventListener('touchstart', onDown, {passive: true});
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('touchmove', onMove, {passive: false});
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchend', onUp);
+    });
   }
 
   function _saveTriggerPosition() {
