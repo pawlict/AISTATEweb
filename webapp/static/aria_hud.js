@@ -279,7 +279,9 @@
 
   /* ---- Init ---- */
   function init() {
+    console.log('[ARIA] init() called');
     AriaHUD.$trigger       = document.getElementById('aria-trigger');
+    console.log('[ARIA] trigger element:', AriaHUD.$trigger);
     AriaHUD.$hud           = document.getElementById('aria-hud');
     AriaHUD.$messages      = document.getElementById('aria-messages');
     AriaHUD.$hints         = document.getElementById('aria-hints');
@@ -315,8 +317,10 @@
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
+    console.log('[ARIA] calling _initDrag on trigger');
     _initDrag(AriaHUD.$trigger);
     _restoreTriggerPosition();
+    console.log('[ARIA] drag initialized, trigger pointer-events:', window.getComputedStyle(AriaHUD.$trigger).pointerEvents);
     document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
     AriaHUD.$sendBtn?.addEventListener('click', sendMessage);
     AriaHUD.$ttsBtn?.addEventListener('click', toggleTTS);
