@@ -43,14 +43,28 @@ const ROLE_LABELS = {
   owner: 'Owner', manager: 'Manager', editor: 'Editor', viewer: 'Viewer'
 };
 
-// --- Modal helpers ---
-function showModal(id){ document.getElementById(id).style.display = 'flex'; }
-function hideModal(id){ document.getElementById(id).style.display = 'none'; }
+// --- Modal helpers (with animation) ---
+function showModal(id){
+  var el = document.getElementById(id);
+  el.style.display = 'flex';
+  // Force reflow so CSS transition triggers
+  el.offsetHeight;
+  el.classList.add('modal-open');
+}
+function hideModal(id){
+  var el = document.getElementById(id);
+  el.classList.remove('modal-open');
+  setTimeout(function(){ el.style.display = 'none'; }, 250);
+}
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if(e.target === m) m.style.display = 'none'; });
+  m.addEventListener('click', e => { if(e.target === m) hideModal(m.id); });
 });
 document.querySelectorAll('.modal-close-x').forEach(b => {
-  b.addEventListener('click', () => { b.closest('.modal-overlay').style.display = 'none'; });
+  b.addEventListener('click', () => {
+    var overlay = b.closest('.modal-overlay');
+    if(overlay && overlay.id) hideModal(overlay.id);
+    else overlay.style.display = 'none';
+  });
 });
 
 // --- Type buttons ---
