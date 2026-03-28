@@ -194,13 +194,57 @@ Moduł analizy danych billingowych GSM.
 - Otwórz mapę bez danych billingowych (przycisk mapy w toolbarze).
 - Tryb edycji — dodawaj punkty, poligony, warstwy użytkownika.
 
-### 6.4 Analiza Crypto
+### 6.4 Analiza Crypto *(eksperymentalne)*
 
-Moduł analizy transakcji kryptowalutowych.
+Moduł offline analizy transakcji kryptowalutowych (BTC / ETH) oraz danych giełdowych.
 
-1. Wczytaj dane transakcji (CSV, JSON).
-2. Przeglądaj wyniki analizy.
-3. Generuj analizę narracyjną za pomocą modelu LLM.
+#### Import danych
+1. Przejdź do zakładki **Crypto** w module Analiza.
+2. Kliknij **Wczytaj dane** i wybierz plik CSV lub JSON.
+3. System automatycznie rozpozna format:
+   - **Blockchain**: WalletExplorer.com, Etherscan
+   - **Giełdy**: Binance, Kraken, Coinbase, Revolut i inne (16+ formatów)
+4. Po wczytaniu pojawią się informacje o danych: liczba transakcji, okres, portfel tokenów.
+
+#### Widok danych
+- **Tryb giełdowy** — tabela transakcji giełdowych z typami (deposit, withdraw, swap, staking itp.).
+- **Tryb blockchain** — tabela transakcji on-chain z adresami i kwotami.
+- **Portfel tokenów** — lista tokenów z opisami, klasyfikacją (znany / nieznany) i wartościami.
+- **Słownik typów transakcji** — najedź kursorem na typ, aby zobaczyć opis (tooltip).
+
+#### Klasyfikacja i przegląd
+- Klasyfikuj transakcje: neutralna / poprawna / podejrzana / obserwacja.
+- System automatycznie klasyfikuje niektóre transakcje na podstawie wzorców.
+
+#### Anomalie
+- **Detekcja anomalii ML** — algorytm wykrywa nietypowe transakcje (duże kwoty, nietypowe godziny, podejrzane wzorce).
+- Typy anomalii: peel chain, dust attack, round-trip, smurfing, structuring.
+- Baza adresów sankcjonowanych **OFAC** i znanych kontraktów DeFi.
+
+#### Wykresy
+- **Oś czasu salda** — zmiana salda w czasie (z normalizacją logarytmiczną).
+- **Wolumen miesięczny** — suma transakcji w poszczególnych miesiącach.
+- **Aktywność dzienna** — rozkład transakcji w dniach tygodnia.
+- **Ranking kontrahentów** — najczęstsi partnerzy transakcji.
+
+#### Graf przepływów
+- Interaktywny **graf transakcji** (Cytoscape.js) — wizualizacja przepływów między adresami/kontrahentami.
+- Kliknij węzeł, aby zobaczyć szczegóły.
+
+#### Profilowanie użytkownika (Binance)
+- 10 wzorców behawioralnych: HODLer, Scalper, Day Trader, Swing Trader, Staker, Whale, Institutional, Alpha Hunter, Meme Trader, Bagholder.
+- 18 kart analizy forensycznej (kontrahenci wewnętrzni, adresy on-chain, wash trading, P2P, analiza opłat i inne).
+
+#### Analiza narracyjna (LLM)
+- Kliknij **Generuj analizę** → model Ollama wygeneruje raport opisowy z wnioskami i rekomendacjami.
+
+#### Raporty
+- Eksportuj wyniki do **HTML / DOCX / TXT** z toolbara.
+
+#### Panel analityczny (Crypto)
+- Lewy panel z notatką globalną i notatkami do transakcji.
+- **Ctrl+M** — szybkie dodanie notatki do bieżącej transakcji.
+- Tagi: neutralny, poprawny, podejrzany, obserwacja + 4 tagi własne.
 
 ---
 
@@ -365,11 +409,58 @@ Podczas tworzenia projektu pojawia się checkbox **Szyfruj projekt** z informacj
 
 ---
 
+## 12. A.R.I.A. — asystent AI
+
+Pływający przycisk A.R.I.A. (w prawym dolnym rogu ekranu) otwiera panel asystenta AI.
+
+### Funkcje
+- **Czat z AI** — zadawaj pytania dotyczące bieżącego kontekstu (transkrypcji, analizy, danych).
+- **Kontekst automatyczny** — asystent automatycznie uwzględnia dane z aktualnie otwartej strony.
+- **Czytanie odpowiedzi** (TTS) — odsłuchaj odpowiedź asystenta.
+- **Podpowiedzi** (hint chips) — gotowe pytania dostosowane do aktualnego modułu.
+- **Przeciąganie** — przycisk A.R.I.A. można przeciągnąć w dowolne miejsce na ekranie (pozycja jest zapamiętywana).
+
+---
+
+## 13. Odtwarzacz audio
+
+Pasek odtwarzacza audio pojawia się w transkrypcji i diaryzacji, gdy projekt ma plik audio.
+
+- **Play / Pauza** — odtwórz lub zatrzymaj nagranie.
+- **Przewijanie** ±5 sekund (przyciski lub kliknięcie na pasku postępu).
+- **Prędkość odtwarzania** — 0.5×, 0.75×, 1×, 1.25×, 1.5×, 2× (zapisywana w przeglądarce).
+- **Kliknij na segment** tekstu, aby odsłuchać odpowiadający fragment audio.
+- **Mapa fali dźwiękowej** (waveform) — wizualizacja amplitudy z markerami segmentów.
+
+---
+
+## 14. Wyszukiwanie i edycja segmentów
+
+### Wyszukiwanie w tekście
+- W transkrypcji i diaryzacji użyj **Ctrl+F** lub ikony lupy w toolbarze.
+- Wyszukiwanie podświetla trafienia i pokazuje ich liczbę.
+- Nawiguj między trafieniami strzałkami ↑ ↓.
+
+### Scalanie i dzielenie segmentów
+- **Scal segmenty** — zaznacz dwa sąsiednie bloki i kliknij „Scal" (ikona w toolbarze).
+- **Podziel segment** — ustaw kursor w bloku i kliknij „Podziel" → blok zostanie podzielony w miejscu kursora.
+
+---
+
+## 15. Tryb ciemny / jasny
+
+- Kliknij ikonę motywu w pasku bocznym (ikona słońca / księżyca).
+- Wybór jest zapamiętywany w przeglądarce.
+
+---
+
 ## Skróty klawiszowe
 
 | Skrót | Akcja |
 |-------|-------|
-| **Esc** | Zamknij edytor bloku |
+| **Esc** | Zamknij edytor bloku / zamknij wyszukiwanie |
+| **Ctrl+F** | Otwórz wyszukiwanie w tekście (transkrypcja / diaryzacja) |
 | **Ctrl+Enter** | Zapisz notatkę |
-| **Ctrl+M** | Dodaj notatkę analityczną (AML / GSM) |
+| **Ctrl+M** | Dodaj notatkę analityczną (AML / GSM / Crypto) |
 | **PPM** (prawy przycisk myszy) | Otwórz edytor bloku (transkrypcja / diaryzacja) |
+| **Kliknij segment** | Odtwórz fragment audio |
