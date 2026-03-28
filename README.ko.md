@@ -1,6 +1,6 @@
 # AISTATEweb Community (3.7.2 베타)
 
-[![English](https://flagcdn.com/24x18/gb.png) English](README.md) | [![Polski](https://flagcdn.com/24x18/pl.png) Polski](README.pl.md) | [![한국어](https://flagcdn.com/24x18/kr.png) 한국어](README.ko.md) | [![Español](https://flagcdn.com/24x18/es.png) Español](README.es.md) | [![Français](https://flagcdn.com/24x18/fr.png) Français](README.fr.md)
+[![English](https://flagcdn.com/24x18/gb.png) English](README.md) | [![Polski](https://flagcdn.com/24x18/pl.png) Polski](README.pl.md) | [![한국어](https://flagcdn.com/24x18/kr.png) 한국어](README.ko.md) | [![Español](https://flagcdn.com/24x18/es.png) Español](README.es.md) | [![Français](https://flagcdn.com/24x18/fr.png) Français](README.fr.md) | [![中文](https://flagcdn.com/24x18/cn.png) 中文](README.zh.md) | [![Українська](https://flagcdn.com/24x18/ua.png) Українська](README.uk.md) | [![Deutsch](https://flagcdn.com/24x18/de.png) Deutsch](README.de.md)
 
 ![Version](https://img.shields.io/badge/버전-3.7.2%20beta-orange)
 ![Edition](https://img.shields.io/badge/에디션-Community-blue)
@@ -301,7 +301,7 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - NLLB 설정 페이지 추가
 - 작업 우선순위 변경 기능 추가
 - Chat LLM 추가
-- 배경 사운드 분석
+- 배경 사운드 분석 *(실험적)*
 
 ## 베타 3.0 - 3.1
 - 데이터 분석을 위한 LLM Ollama 모듈 도입

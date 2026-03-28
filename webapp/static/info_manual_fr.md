@@ -42,7 +42,7 @@ Module de reconnaissance vocale (Speech-to-Text).
 - **Clic droit** sur un bloc pour ouvrir l'éditeur en ligne — modifiez le texte et le nom du locuteur.
 - Toutes les modifications sont enregistrées automatiquement.
 
-### Détection de sons
+### Détection de sons *(expérimental)*
 - Si vous disposez d'un modèle de détection de sons installé (YAMNet, PANNs, BEATs), activez l'option **Détection de sons** dans la barre d'outils.
 - Les sons détectés (toux, rires, musique, sirène, etc.) apparaîtront sous forme de marqueurs dans le texte.
 
@@ -273,7 +273,7 @@ Surveillance des tâches et diagnostics système.
 ### Paramètres ASR
 - Installez les modèles Whisper (tiny → large-v3).
 - Installez les modèles ASR et de diarisation NeMo.
-- Installez les modèles de détection sonore (YAMNet, PANNs, BEATs).
+- Installez les modèles de détection sonore (YAMNet, PANNs, BEATs) *(expérimental)*.
 
 ### Paramètres LLM
 - Parcourez et installez les modèles Ollama (analyse rapide, analyse approfondie, financier, relecture, traduction, vision/OCR).

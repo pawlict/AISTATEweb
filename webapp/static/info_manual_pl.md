@@ -42,7 +42,7 @@ Moduł zamiany mowy na tekst (Speech-to-Text).
 - **Prawy przycisk myszy** (PPM) na bloku otwiera edytor inline — możesz zmienić tekst i mówcę.
 - Wszystkie zmiany zapisują się automatycznie.
 
-### Detekcja dźwięków
+### Detekcja dźwięków *(eksperymentalne)*
 - Jeśli masz zainstalowany model detekcji dźwięków (YAMNet, PANNs, BEATs), włącz opcję **Detekcja dźwięków** w toolbarze.
 - Wykryte dźwięki (kaszel, śmiech, muzyka, syrena itp.) pojawią się jako znaczniki w tekście.
 
@@ -273,7 +273,7 @@ Podgląd zadań i diagnostyka systemowa.
 ### Ustawienia ASR
 - Instaluj modele Whisper (tiny → large-v3).
 - Instaluj modele NeMo ASR i diaryzacji.
-- Instaluj modele detekcji dźwięków (YAMNet, PANNs, BEATs).
+- Instaluj modele detekcji dźwięków (YAMNet, PANNs, BEATs) *(eksperymentalne)*.
 
 ### Ustawienia LLM
 - Przeglądaj i instaluj modele Ollama (szybka analiza, głęboka analiza, finanse, korekta, tłumaczenia, vision/OCR).

@@ -1,6 +1,6 @@
 # AISTATEweb Community (3.7.2 beta)
 
-[![English](https://flagcdn.com/24x18/gb.png) English](README.md) | [![Polski](https://flagcdn.com/24x18/pl.png) Polski](README.pl.md) | [![한국어](https://flagcdn.com/24x18/kr.png) 한국어](README.ko.md) | [![Español](https://flagcdn.com/24x18/es.png) Español](README.es.md) | [![Français](https://flagcdn.com/24x18/fr.png) Français](README.fr.md)
+[![English](https://flagcdn.com/24x18/gb.png) English](README.md) | [![Polski](https://flagcdn.com/24x18/pl.png) Polski](README.pl.md) | [![한국어](https://flagcdn.com/24x18/kr.png) 한국어](README.ko.md) | [![Español](https://flagcdn.com/24x18/es.png) Español](README.es.md) | [![Français](https://flagcdn.com/24x18/fr.png) Français](README.fr.md) | [![中文](https://flagcdn.com/24x18/cn.png) 中文](README.zh.md) | [![Українська](https://flagcdn.com/24x18/ua.png) Українська](README.uk.md) | [![Deutsch](https://flagcdn.com/24x18/de.png) Deutsch](README.de.md)
 
 ![Versión](https://img.shields.io/badge/Versión-3.7.2%20beta-orange)
 ![Edición](https://img.shields.io/badge/Edición-Community-blue)
@@ -302,7 +302,7 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - Añadida página de configuración de NLLB
 - Añadida la posibilidad de cambiar prioridades de tareas
 - Añadido Chat LLM
-- Análisis de sonido de fondo
+- Análisis de sonido de fondo *(experimental)*
 
 ## beta 3.0 - 3.1
 - Módulos LLM Ollama para análisis de datos introducidos
