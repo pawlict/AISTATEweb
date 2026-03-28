@@ -1,6 +1,6 @@
 # AISTATEweb Community (3.7.2 bêta)
 
-🇬🇧 [English](README.md) | 🇵🇱 [Polski](README.pl.md) | 🇰🇷 [한국어](README.ko.md) | 🇪🇸 [Español](README.es.md) | 🇫🇷 [Français](README.fr.md)
+[![English](https://flagcdn.com/24x18/gb.png) English](README.md) | [![Polski](https://flagcdn.com/24x18/pl.png) Polski](README.pl.md) | [![한국어](https://flagcdn.com/24x18/kr.png) 한국어](README.ko.md) | [![Español](https://flagcdn.com/24x18/es.png) Español](README.es.md) | [![Français](https://flagcdn.com/24x18/fr.png) Français](README.fr.md)
 
 ![Version](https://img.shields.io/badge/Version-3.7.2%20b%C3%AAta-orange)
 ![Édition](https://img.shields.io/badge/%C3%89dition-Community-blue)
