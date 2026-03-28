@@ -643,14 +643,14 @@ function _showCreateProjectDialog(){
     const overlay = document.createElement("div");
     overlay.id = "_project_create_overlay";
     overlay.className = "modal-overlay";
-    overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px;";
 
     const panel = document.createElement("div");
-    panel.style.cssText = "background:var(--panel,#fff);border-radius:12px;padding:0;box-shadow:0 8px 32px rgba(0,0,0,.18);width:90%;max-width:440px;overflow:hidden;color:var(--text,#1e293b);";
+    panel.style.cssText = "border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.48);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);border-radius:16px;padding:0;box-shadow:0 12px 40px rgba(0,0,0,.10),0 1px 0 rgba(255,255,255,.6) inset;width:90%;max-width:440px;overflow:hidden;color:var(--text,#1e293b);";
 
     // Header
     const header = document.createElement("div");
-    header.style.cssText = "padding:20px 24px 12px;border-bottom:1px solid var(--border,#e2e8f0);";
+    header.style.cssText = "padding:20px 24px 12px;border-bottom:1px solid rgba(15,23,42,.08);";
     header.innerHTML = `
       <div style="font-size:16px;font-weight:700;color:var(--text,#1e293b);">
         ${t("banner.dialog_title") || "Utwórz nowy projekt"}
@@ -669,7 +669,7 @@ function _showCreateProjectDialog(){
       </label>
       <input id="_pcd_name" class="input" type="text"
         placeholder="${(t("banner.project_name_placeholder") || "np. {module} {date}").replace("{module}", moduleLabel).replace("{date}", new Date().toLocaleDateString("pl"))}"
-        style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:14px;border:1px solid var(--border,#cbd5e1);border-radius:8px;"/>
+        style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:14px;border:1px solid rgba(15,23,42,.10);border-radius:8px;background:rgba(255,255,255,.55);"/>
       <div style="font-size:11px;color:var(--text-muted,#94a3b8);margin-top:4px;">
         ${t("banner.project_name_hint") || "Zostaw puste, aby wygenerować nazwę automatycznie."}
       </div>
