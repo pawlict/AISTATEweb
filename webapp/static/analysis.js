@@ -1315,7 +1315,8 @@ async function _regenQuickIfNeeded(){
     const topSave = QS("#an_report_save_btn");
     if(topSave) topSave.onclick = _saveManual;
 
-    QS("#analysis_sidebar_toggle").onclick = _toggleSidebar;
+    var _sideToggle = QS("#analysis_sidebar_toggle");
+    if(_sideToggle) _sideToggle.onclick = _toggleSidebar;
     const _stHdr = QS("#an_settings_hdr");
     if(_stHdr) _stHdr.onclick = _toggleSettings;
     QS("#quick_toggle_btn").onclick = _toggleQuick;
