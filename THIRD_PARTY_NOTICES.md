@@ -125,9 +125,59 @@ Source: https://www.ffmpeg.org/legal.html
 
 * * *
 
-### Framework/server (if used in this repository)
-- FastAPI — MIT
-- Uvicorn — BSD-3-Clause
-- PyTorch — BSD-3-Clause
+### Chart.js (charts and data visualization)
+- Project: Chart.js
+- License: MIT
+- Version used: 4.4.1 / 4.4.4 (loaded from CDN — jsdelivr)
+- Source: https://github.com/chartjs/Chart.js
+- Website: https://www.chartjs.org
 
-(Exact dependencies and versions are defined in requirements.txt / lock files.)
+* * *
+
+### Cytoscape.js (graph visualization)
+- Project: Cytoscape.js
+- License: MIT
+- Version used: 3.28.1 (loaded from CDN — unpkg)
+- Source: https://github.com/cytoscape/cytoscape.js
+- Website: https://js.cytoscape.org
+
+* * *
+
+### OSRM (Open Source Routing Machine)
+- Project: OSRM
+- License: BSD-2-Clause
+- Usage: routing API calls to `router.project-osrm.org` (GSM/BTS trip routing)
+- Source: https://github.com/Project-OSRM/osrm-backend
+- Website: https://project-osrm.org
+- API usage policy: https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy
+
+* * *
+
+### Python libraries
+
+| Library | License | Purpose |
+|---------|---------|---------|
+| FastAPI | MIT | Web framework |
+| Uvicorn | BSD-3-Clause | ASGI server |
+| PyTorch | BSD-3-Clause | ML inference |
+| Transformers (Hugging Face) | Apache-2.0 | Model loading (NLLB, etc.) |
+| sentencepiece | Apache-2.0 | Tokenization (NLLB) |
+| pandas | BSD-3-Clause | Data analysis (AML, GSM, Crypto) |
+| pdfplumber | MIT | PDF text extraction |
+| PyMuPDF (fitz) | AGPL-3.0 | PDF rendering and extraction |
+| PyPDF2 | BSD-3-Clause | PDF reading |
+| reportlab | BSD | PDF report generation |
+| Pillow | HPND | Image processing |
+| python-docx | MIT | DOCX report generation |
+| openpyxl | MIT | XLSX file processing |
+| matplotlib | PSF (BSD-compatible) | Chart generation for reports |
+| langdetect | Apache-2.0 | Language detection |
+| cryptography | Apache-2.0 / BSD-3-Clause | Encryption |
+| argon2-cffi | MIT | Password hashing |
+| httpx | BSD-3-Clause | Async HTTP client (Ollama) |
+| markdown | BSD-3-Clause | Markdown rendering |
+| Jinja2 | BSD-3-Clause | HTML templates |
+
+**Note:** PyMuPDF is licensed under **AGPL-3.0**. If you distribute modified binaries, AGPL terms apply.
+
+(Exact dependencies and versions are defined in requirements.txt.)
