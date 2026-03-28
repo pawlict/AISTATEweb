@@ -327,7 +327,7 @@ function initSidebar(){
       });
     }
 
-    // Nav-section collapse/expand on double-click
+    // Nav-section collapse/expand on click
     document.querySelectorAll(".nav .nav-section").forEach(function(section){
       var key = "aistate_navsec_" + (section.getAttribute("data-i18n") || section.textContent.trim());
       // Restore saved state
@@ -335,7 +335,7 @@ function initSidebar(){
         section.classList.add("nav-section-collapsed");
         _toggleNavSectionLinks(section, true);
       }
-      section.addEventListener("dblclick", function(){
+      section.addEventListener("click", function(){
         var isCollapsed = section.classList.toggle("nav-section-collapsed");
         _toggleNavSectionLinks(section, isCollapsed);
         localStorage.setItem(key, isCollapsed ? "1" : "0");
