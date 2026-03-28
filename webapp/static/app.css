@@ -2786,6 +2786,13 @@ button.pill-icon:hover{
 .analyst-panel-section{
   padding:10px 14px;
 }
+.analyst-panel-section .nav-section{
+  margin-top:0;
+  padding:4px 0 4px;
+}
+.analyst-panel-section-content{
+  margin-top:6px;
+}
 .analyst-panel-label{
   font-size:12px;
   font-weight:600;
