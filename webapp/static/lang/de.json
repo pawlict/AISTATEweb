@@ -196,6 +196,8 @@
   "common.close": "Schließen",
   "common.delete": "Löschen",
   "common.confirm": "OK",
+  "projects.title": "Projekte",
+  "projects.subprojects": "Projekte",
   "common.logs_in_tab_html": "Protokolle sind im Tab <b>Protokolle</b> verfügbar.",
   "common.progress": "Fortschritt",
   "common.status": "Status",

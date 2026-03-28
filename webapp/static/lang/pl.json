@@ -196,6 +196,8 @@
   "common.close": "Zamknij",
   "common.delete": "Usuń",
   "common.confirm": "OK",
+  "projects.title": "Projekty",
+  "projects.subprojects": "Projekty",
   "common.logs_in_tab_html": "Logi są dostępne w zakładce <b>Logi</b>.",
   "common.progress": "Postęp",
   "common.status": "Stan",

@@ -513,7 +513,7 @@ textarea{min-height:220px; resize:vertical}
 .modal-title{font-weight:900; font-size:18px}
 
 
-/* ---- Projects: Delete modal (Export/Import/Delete cards) ---- */
+/* ---- Projects: modals (glassmorphism) ---- */
 .modal-overlay{
   position: fixed;
   inset: 0;
@@ -522,17 +522,35 @@ textarea{min-height:220px; resize:vertical}
   justify-content: center;
   padding: 18px;
   z-index: 9999;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity:0;
+  transition: opacity .25s ease;
+  pointer-events:none;
+}
+.modal-overlay.modal-open{
+  opacity:1;
+  pointer-events:auto;
 }
 .modal-panel{
   width: min(720px, 96vw);
   max-height: 90vh;
   overflow: auto;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,.98);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px;
+  border: 1px solid rgba(255,255,255,.45);
+  background: rgba(255,255,255,.48);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  border-radius: 16px;
+  box-shadow:
+    0 8px 32px rgba(15,23,42,.10),
+    0 1px 0 rgba(255,255,255,.6) inset;
+  padding: 20px;
+  transform: scale(.96) translateY(8px);
+  transition: transform .25s cubic-bezier(.22,1,.36,1);
+}
+.modal-overlay.modal-open .modal-panel{
+  transform: scale(1) translateY(0);
 }
 .modal-header{
   display:flex;
@@ -543,13 +561,40 @@ textarea{min-height:220px; resize:vertical}
 .modal-title{
   font-weight: 900;
   font-size: 18px;
+  color: var(--text, #1a1a2e);
 }
-.modal-body{ margin-top: 10px; }
+.modal-body{ margin-top: 12px; }
 .modal-footer{
   display:flex;
   justify-content:flex-end;
   gap:10px;
-  margin-top: 14px;
+  margin-top: 16px;
+}
+/* Glass inputs inside modals */
+.modal-panel .input,
+.modal-panel select{
+  background: rgba(255,255,255,.55);
+  border-color: rgba(15,23,42,.10);
+  transition: border-color .15s, box-shadow .15s;
+}
+.modal-panel .input:focus,
+.modal-panel select:focus{
+  border-color: var(--accent, #4a6cf7);
+  box-shadow: 0 0 0 3px rgba(74,108,247,.12);
+}
+/* Glass divider */
+.modal-panel .hr{
+  background: linear-gradient(90deg, transparent, rgba(15,23,42,.10), transparent);
+}
+/* Close button in modal */
+.modal-close-x{
+  opacity: .55;
+  transition: opacity .15s, background .15s;
+  border-radius: 8px;
+}
+.modal-close-x:hover{
+  opacity: 1;
+  background: rgba(15,23,42,.06);
 }
 
 
@@ -3991,9 +4036,32 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   color: var(--text);
 }
 [data-theme="dark"] .modal-panel{
-  background: var(--panel);
-  border-color: var(--border);
+  background: rgba(22,33,55,.55);
+  border-color: rgba(255,255,255,.08);
   color: var(--text);
+  box-shadow:
+    0 8px 32px rgba(0,0,0,.25),
+    0 1px 0 rgba(255,255,255,.05) inset;
+}
+[data-theme="dark"] .modal-panel .input,
+[data-theme="dark"] .modal-panel select{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.10);
+  color: var(--text);
+}
+[data-theme="dark"] .modal-panel .input:focus,
+[data-theme="dark"] .modal-panel select:focus{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(74,158,237,.15);
+}
+[data-theme="dark"] .modal-panel .hr{
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+}
+[data-theme="dark"] .modal-close-x{
+  filter: invert(.85);
+}
+[data-theme="dark"] .modal-close-x:hover{
+  background: rgba(255,255,255,.08);
 }
 [data-theme="dark"] .modal-box{
   background: var(--panel);
@@ -4004,7 +4072,9 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   background: rgba(0,0,0,.65);
 }
 [data-theme="dark"] .modal-overlay{
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,.40);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Pill toggles */

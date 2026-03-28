@@ -196,6 +196,8 @@
   "common.close": "关闭",
   "common.delete": "删除",
   "common.confirm": "确定",
+  "projects.title": "项目",
+  "projects.subprojects": "项目",
   "common.logs_in_tab_html": "日志可在<b>日志</b>选项卡中查看。",
   "common.progress": "进度",
   "common.status": "状态",

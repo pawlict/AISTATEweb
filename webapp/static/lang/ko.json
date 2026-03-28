@@ -204,6 +204,8 @@
   "common.close": "닫기",
   "common.delete": "삭제",
   "common.confirm": "확인",
+  "projects.title": "프로젝트",
+  "projects.subprojects": "프로젝트",
   "common.logs_in_tab_html": "로그는 <b>로그</b> 탭에서 확인할 수 있습니다.",
   "common.progress": "진행률",
   "common.status": "상태",
