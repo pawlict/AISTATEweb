@@ -3279,27 +3279,9 @@ button.pill-icon:hover{
   background:rgba(231,76,60,.08);
 }
 
-/* Settings label (styled like nav-section, with logo gradient hover) */
-.user-panel-settings-label{
-  margin:0;
-  padding:6px 12px 2px;
-  font-size:11px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  color:var(--muted,#888);
-  opacity:.85;
-  cursor:pointer;
-  transition:color .2s, text-shadow .2s;
-  user-select:none;
-  text-shadow:0 1px 3px rgba(0,0,0,.08);
-}
-.user-panel-settings-label:hover{
-  background:linear-gradient(90deg, #3b82f6, #a855f7);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  background-clip:text;
-  opacity:1;
-  text-shadow:none;
+/* Settings toggle inside user-panel — inherits .nav-section styles */
+.user-panel-settings-toggle{
+  margin-top:0;
 }
 
 /* Avatar picker modal */
@@ -3369,7 +3351,7 @@ body.sidebar-collapsed .user-panel-header:hover{ background:rgba(231,76,60,.08);
 body.sidebar-collapsed .user-panel-avatar{ display:none; }
 body.sidebar-collapsed .user-panel-info{ display:none; }
 body.sidebar-collapsed .user-panel-logout-btn{ display:none; }
-body.sidebar-collapsed .user-panel-settings-label{ display:none; }
+body.sidebar-collapsed .user-panel-settings-toggle{ display:none; }
 body.sidebar-collapsed .user-panel-body,
 body.sidebar-collapsed .user-settings-menu{ display:none !important; }
 body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
@@ -4380,7 +4362,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 [data-theme="dark"] .user-panel-logout-btn img{
   filter: invert(.85);
 }
-[data-theme="dark"] .user-panel-settings-label{
+[data-theme="dark"] .user-panel-settings-toggle{
   color: var(--muted);
 }
 [data-theme="dark"] .avatar-grid-item{
