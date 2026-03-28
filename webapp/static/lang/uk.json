@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Концентричне розташування (ризик)",
   "common.cancel": "Скасувати",
   "common.close": "Закрити",
+  "common.delete": "Видалити",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Журнали доступні на вкладці <b>Журнали</b>.",
   "common.progress": "Прогрес",
   "common.status": "Статус",

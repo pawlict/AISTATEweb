@@ -202,6 +202,8 @@
   "aml.layout.concentric": "동심원 레이아웃 (위험도)",
   "common.cancel": "취소",
   "common.close": "닫기",
+  "common.delete": "삭제",
+  "common.confirm": "확인",
   "common.logs_in_tab_html": "로그는 <b>로그</b> 탭에서 확인할 수 있습니다.",
   "common.progress": "진행률",
   "common.status": "상태",

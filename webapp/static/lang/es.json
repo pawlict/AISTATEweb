@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Disposición concéntrica (riesgo)",
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
+  "common.delete": "Eliminar",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Los registros están disponibles en la pestaña <b>Registros</b>.",
   "common.progress": "Progreso",
   "common.status": "Estado",

@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Układ koncentryczny (ryzyko)",
   "common.cancel": "Anuluj",
   "common.close": "Zamknij",
+  "common.delete": "Usuń",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Logi są dostępne w zakładce <b>Logi</b>.",
   "common.progress": "Postęp",
   "common.status": "Stan",

@@ -552,7 +552,14 @@ function _openDeleteModalForProject(ws, preSelectId) {
     const sp = (_ws.subprojects||[]).find(s => s.id === spId);
     const wipe = wipeSelect ? wipeSelect.value : 'none';
 
-    if(!confirm(t('projects.confirm_delete').replace('{name}', sp?sp.name:spId))) return;
+    var _delName = sp ? sp.name : spId;
+    var _ok = await confirmModal({
+      message: t('projects.confirm_delete').replace('{name}', _delName),
+      icon: '/static/icons/projekty/project_delete.svg',
+      danger: true,
+      confirmLabel: t('common.delete')
+    });
+    if(!_ok) return;
 
     try {
       await apiFetch(API + '/' + _ws.id + '/subprojects/' + spId + '?wipe_method=' + encodeURIComponent(wipe), {method:'DELETE'});
