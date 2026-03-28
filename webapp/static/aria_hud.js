@@ -145,9 +145,8 @@
   /* ---- Drag & Position Persistence ---- */
   var _LS_POS_KEY = 'aistate_aria_trigger_pos';
 
-  function _initDrag(el) {
+  function _initTriggerDrag(el) {
     var startX, startY, startLeft, startTop, dragging = false, moved = false;
-    var downTime = 0;
 
     el.style.touchAction = 'none';
 
@@ -306,7 +305,7 @@
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
-    _initDrag(AriaHUD.$trigger);
+    _initTriggerDrag(AriaHUD.$trigger);
     _restoreTriggerPosition();
     document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
     AriaHUD.$sendBtn?.addEventListener('click', sendMessage);
