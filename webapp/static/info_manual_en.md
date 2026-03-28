@@ -1,4 +1,8 @@
-# AISTATE Web — User Manual
+# AISTATE Web Community — User Manual
+
+> **Edition:** Community (open-source) · **Version:** 3.7.2 beta
+>
+> The Community edition is a free, fully-featured version of AISTATE Web for individual, educational, and research use. It includes all modules: transcription, diarization, translation, analysis (LLM, AML, GSM, Crypto), Chat LLM, and reporting.
 
 ---
 
