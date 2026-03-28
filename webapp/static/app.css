@@ -199,7 +199,7 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
 
 .nav-label{display:inline}
 
-.nav .nav-section{
+.nav-section{
   margin-top:12px;
   padding:10px 12px 2px;
   font-size:11px;
@@ -212,7 +212,7 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   transition:color .2s, text-shadow .2s;
   text-shadow:0 1px 3px rgba(0,0,0,.08);
 }
-.nav .nav-section:hover{
+.nav-section:hover{
   background:linear-gradient(90deg, #3b82f6, #a855f7);
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
@@ -220,10 +220,10 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   opacity:1;
   text-shadow:none;
 }
-.nav .nav-section.nav-section-collapsed{
+.nav-section.nav-section-collapsed{
   opacity:.55;
 }
-.nav .nav-section.nav-section-collapsed:hover{
+.nav-section.nav-section-collapsed:hover{
   opacity:.85;
 }
 .nav a{
@@ -256,7 +256,7 @@ body.sidebar-collapsed .nav a{justify-content:center; padding:12px 10px}
 body.sidebar-collapsed .nav-label{display:none}
 body.sidebar-collapsed .nav-icon{margin-right:0; width:30px; height:30px}
 body.sidebar-collapsed .nav-icon svg{width:22px; height:22px}
-body.sidebar-collapsed .nav-section{display:none}
+body.sidebar-collapsed .nav .nav-section{display:none}
 
 .main{flex:1; padding:22px 26px; min-width:0; overflow-x:hidden}
 
@@ -3279,8 +3279,8 @@ button.pill-icon:hover{
   background:rgba(231,76,60,.08);
 }
 
-/* Settings toggle inside user-panel — inherits .nav-section styles */
-.user-panel-settings-toggle{
+/* Settings toggle inside user-panel */
+.user-panel .nav-section{
   margin-top:0;
 }
 
