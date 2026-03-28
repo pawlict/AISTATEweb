@@ -1,6 +1,6 @@
-# AISTATEweb (3.7.1 beta)
+# AISTATEweb (3.7.2 beta)
 
-![Version](https://img.shields.io/badge/Version-3.7.1%20beta-orange)
+![Version](https://img.shields.io/badge/Version-3.7.2%20beta-orange)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -170,162 +170,94 @@ Open in browser:
 * * *
 # AISTATEweb — Windows (WSL2 + NVIDIA GPU) Setup
 
-Important: in WSL2 the **NVIDIA driver is installed on Windows**, not inside the Linux distribution. Installing Linux `nvidia-driver-*` packages in WSL2 can cause CUDA/NVML mismatches and unstable behavior. 
+> **Important:** In WSL2 the NVIDIA driver is installed **on Windows**, not inside Linux. Do **not** install `nvidia-driver-*` packages inside the WSL distro.
 
 ---
-## 1. Windows prerequisites
 
-1. Enable WSL2 (Windows Features / PowerShell).
-2. Update WSL and reboot the WSL VM:
+### 1. Windows side
+
+1. Enable WSL2 (PowerShell: `wsl --install` or Windows Features).
+2. Install the latest **NVIDIA Windows driver** (Game Ready / Studio) — this provides GPU support inside WSL2.
+3. Update WSL and restart:
    ```powershell
    wsl --update
    wsl --shutdown
    ```
-3. Install the **NVIDIA Windows driver** that supports WSL2 (Game Ready / Studio) and reboot Windows.
 
----
+### 2. Inside WSL (Ubuntu recommended)
 
-## 2. Create / update your WSL distro
-
-Use Ubuntu/Debian/Kali (Ubuntu LTS is usually the easiest for packages).
-
-Inside WSL:
 ```bash
 sudo apt update && sudo apt upgrade -y
-```
-
----
-
-## 3. GPU sanity check inside WSL2 (critical)
-
-### 3.1 Confirm you are really on WSL2
-```bash
-uname -a
-grep -i microsoft /proc/version || true
-```
-
-### 3.2 `nvidia-smi` should come from the WSL stub
-In WSL2 the expected `nvidia-smi` is typically located at:
-`/usr/lib/wsl/lib/nvidia-smi`
-
-Check:
-```bash
-which nvidia-smi
-ls -l /usr/lib/wsl/lib/nvidia-smi || true
-nvidia-smi
-```
-
-If `which nvidia-smi` points to `/usr/bin/nvidia-smi` via `update-alternatives`, you likely installed NVIDIA user-space packages inside the distro (not recommended for WSL2).
-
-### 3.3 Recommended fix: remove NVIDIA packages from the Linux distro
-> WSL2 uses the Windows driver; keeping Linux `nvidia-*` packages often creates mismatched NVML/CUDA tooling.
-
-```bash
-sudo apt purge -y 'nvidia-*' 'libnvidia-*'
-sudo apt autoremove --purge -y
-```
-
-Ensure the WSL stub path is visible:
-```bash
-echo 'export PATH=/usr/lib/wsl/lib:$PATH' | sudo tee /etc/profile.d/wsl-gpu.sh >/dev/null
-echo 'export LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH}' | sudo tee -a /etc/profile.d/wsl-gpu.sh >/dev/null
-source /etc/profile.d/wsl-gpu.sh
-```
-
-Re-check:
-```bash
-which nvidia-smi
-nvidia-smi
-```
-
----
-
-## 4. System dependencies (WSL)
-
-```bash
-sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip ffmpeg
 ```
 
----
-
-## 5. Get the code
-
+Verify GPU is visible:
 ```bash
-mkdir -p ~/projects
-cd ~/projects
-git clone https://github.com/pawlict/AISTATEweb.git
-cd AISTATEweb
+nvidia-smi
 ```
 
----
-
-## 6. Python venv
+### 3. Install AISTATEweb
 
 ```bash
+mkdir -p ~/projects && cd ~/projects
+git clone https://github.com/pawlict/AISTATEweb.git
+cd AISTATEweb
+
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip setuptools wheel
-```
 
----
-
-## 7. Install PyTorch (CUDA build)
-
-Install the CUDA-enabled PyTorch wheels from the official PyTorch index (example uses **cu128**):
-```bash
+# PyTorch with CUDA (example: cu128)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+pip install -r requirements.txt
 ```
 
 Verify GPU access:
 ```bash
-python -c "import torch; print('cuda:', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+python -c "import torch; print('CUDA:', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
 ```
 
----
-
-## 8. Install AISTATEweb requirements
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## 9. Run AISTATEweb
+### 4. Run
 
 ```bash
 python3 AISTATEweb.py
 ```
 Open in browser: http://127.0.0.1:8000
 
+### Troubleshooting
+
+If `nvidia-smi` doesn't work inside WSL, make sure you did **not** install Linux NVIDIA packages. Remove them if present:
+```bash
+sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
+```
+
 ---
 
 ## References
 
-- NVIDIA: CUDA on WSL User Guide  
-  https://docs.nvidia.com/cuda/wsl-user-guide/index.html
-- Microsoft Learn: CUDA in WSL  
-  https://learn.microsoft.com/windows/ai/directml/gpu-cuda-in-wsl
-- PyTorch: Get Started (installation selector)  
-  https://pytorch.org/get-started/locally/
+- [NVIDIA: CUDA on WSL User Guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html)
+- [Microsoft: Install WSL](https://learn.microsoft.com/windows/wsl/install)
+- [PyTorch: Get Started](https://pytorch.org/get-started/locally/)
+- [pyannote.audio (Hugging Face)](https://huggingface.co/pyannote)
+- [Whisper (OpenAI)](https://github.com/openai/whisper)
+- [NLLB-200 (Meta)](https://huggingface.co/facebook/nllb-200-distilled-600M)
+- [Ollama](https://ollama.com/)
 
 
-
-
-
-## Project structure (important files)
-
-  * `webapp/server.py` — backend (API, project handling, wipe implementation)
-  * `webapp/static/app.js` — frontend logic
-  * `webapp/templates/` — HTML templates
-  * `projects/` (or your configured project dir) — created projects with:
-    * `project.json`
-    * `transcript.txt`
-    * `diarized.txt`
-
-* * *
 “This project is MIT licensed (AS IS). Third-party components are licensed separately — see THIRD_PARTY_NOTICES.md.”
+
+## beta 3.7.2
+- **Analyst panel** — new sidebar panel replacing notes sidebar in transcription and diarization pages
+- **Block notes with tags** — notes can now have colored tags, shown as left border on segments
+- **Revolut crypto PDF** — parser for Revolut cryptocurrency statements, integrated with AML pipeline
+- **Token database (TOP 200)** — known/unknown token classification for crypto analysis
+- **Improved reports** — DOCX/HTML reports with charts, watermarks, dynamic conclusions, section descriptions
+- **ARIA trigger** — draggable floating trigger with position persistence and smart HUD placement
+- Fixed translation stuck at 5% (auto-detect model cache)
+- Fixed translation report losing formatting (newlines collapsed)
+- Fixed stale transcription/diarization results on new audio upload
+- No-cache middleware for static JS/CSS files
 
 ## beta 3.7.1
 - **Cryptocurrency Analysis — Binance** — extended analysis of Binance exchange data
