@@ -2,15 +2,15 @@
 
 <defs><radialGradient id="aw" cx="50%" cy="50%"><stop offset="0%" stop-color="#fff" stop-opacity=".1"/><stop offset="30%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#020617"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#aw)" stroke="#3b82f6" stroke-width="1.5"/>
-<line x1="24" y1="24" x2="6" y2="8" stroke="#bfdbfe" stroke-width=".5" opacity="0.64"/>
-<line x1="24" y1="24" x2="42" y2="6" stroke="#bfdbfe" stroke-width=".5" opacity="0.56"/>
-<line x1="24" y1="24" x2="4" y2="24" stroke="#bfdbfe" stroke-width=".5" opacity="0.48"/>
-<line x1="24" y1="24" x2="44" y2="24" stroke="#bfdbfe" stroke-width=".5" opacity="0.48"/>
-<line x1="24" y1="24" x2="8" y2="40" stroke="#bfdbfe" stroke-width=".5" opacity="0.56"/>
-<line x1="24" y1="24" x2="40" y2="42" stroke="#bfdbfe" stroke-width=".5" opacity="0.48"/>
-<line x1="24" y1="24" x2="24" y2="4" stroke="#bfdbfe" stroke-width=".5" opacity="0.56"/>
-<line x1="24" y1="24" x2="24" y2="44" stroke="#bfdbfe" stroke-width=".5" opacity="0.4"/>
-<circle cx="24" cy="24" r="4" fill="#3b82f6" opacity="0.32"/>
-<circle cx="24" cy="24" r="1.5" fill="#bfdbfe" opacity="0.8"/>
+<line x1="24" y1="24" x2="6" y2="8" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="42" y2="6" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="4" y2="24" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="44" y2="24" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="8" y2="40" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="40" y2="42" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="24" y2="4" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<line x1="24" y1="24" x2="24" y2="44" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<circle cx="24" cy="24" r="4" fill="#c6ffff" opacity="0.95"/>
+<circle cx="24" cy="24" r="1.5" fill="#ffffff" opacity="0.95"/>
 
 </svg>

@@ -2,14 +2,14 @@
 
 <defs><linearGradient id="am1" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#052e16"/><stop offset="100%" stop-color="#021409"/></linearGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#am1)" stroke="#15803d" stroke-width="1.5"/>
-<text x="10" y="14" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.64">01</text>
-<text x="18" y="10" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.48">10</text>
-<text x="30" y="16" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.4">11</text>
-<text x="14" y="24" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.56">00</text>
-<text x="28" y="28" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.48">01</text>
-<text x="8" y="34" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.32">10</text>
-<text x="22" y="38" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.4">11</text>
-<text x="34" y="36" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.32">00</text>
-<text x="36" y="10" font-size="5" fill="#6ee7b7" font-family="monospace" opacity="0.24">01</text>
+<text x="10" y="14" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">01</text>
+<text x="18" y="10" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">10</text>
+<text x="30" y="16" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">11</text>
+<text x="14" y="24" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">00</text>
+<text x="28" y="28" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">01</text>
+<text x="8" y="34" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">10</text>
+<text x="22" y="38" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">11</text>
+<text x="34" y="36" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">00</text>
+<text x="36" y="10" font-size="5" fill="#ffffff" font-family="monospace" opacity="0.95">01</text>
 
 </svg>

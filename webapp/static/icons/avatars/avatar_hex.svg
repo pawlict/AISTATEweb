@@ -2,12 +2,12 @@
 
 <defs><linearGradient id="ah1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#0c1929"/></linearGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#ah1)" stroke="#1d4ed8" stroke-width="1.5"/>
-<path d="M16 10l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.48"/>
-<path d="M28 10l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.4"/>
-<path d="M22 20l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.56"/>
-<path d="M34 20l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.32"/>
-<path d="M16 30l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.4"/>
-<path d="M28 30l5 3v6l-5 3-5-3v-6z" stroke="#bfdbfe" stroke-width="0.7" fill="none" opacity="0.32"/>
-<circle cx="22" cy="23" r="2" fill="#bfdbfe" opacity="0.24"/>
+<path d="M16 10l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<path d="M28 10l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<path d="M22 20l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<path d="M34 20l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<path d="M16 30l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<path d="M28 30l5 3v6l-5 3-5-3v-6z" stroke="#ffffff" stroke-width="0.7" fill="none" opacity="0.95"/>
+<circle cx="22" cy="23" r="2" fill="#ffffff" opacity="0.95"/>
 
 </svg>

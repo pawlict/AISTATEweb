@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="zv" cx="50%" cy="50%"><stop offset="0%" stop-color="#4c1d95"/><stop offset="100%" stop-color="#1e1b4b"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#zv)" stroke="#7c3aed" stroke-width="1.5"/>
+<circle cx="8" cy="8" r=".7" fill="#ffffff" opacity="0.56"/>
+<circle cx="40" cy="10" r=".5" fill="#ffffff" opacity="0.49"/>
+<circle cx="6" cy="34" r=".6" fill="#ffffff" opacity="0.42"/>
+<circle cx="42" cy="38" r=".5" fill="#ffffff" opacity="0.35"/>
+<circle cx="18" cy="6" r=".4" fill="#ffffff" opacity="0.35"/>
+<circle cx="36" cy="6" r=".4" fill="#ffffff" opacity="0.28"/>
+<circle cx="44" cy="24" r=".5" fill="#ffffff" opacity="0.28"/>
+<circle cx="4" cy="20" r=".4" fill="#ffffff" opacity="0.28"/>
+<!-- M shape with loops -->
+<path d="M10 34 L10 14 C10 10 14 10 14 14 L14 34" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.95"/>
+<path d="M14 14 C14 10 18 10 18 14 L18 34" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.95"/>
+<path d="M18 14 C18 10 22 10 22 14 L22 28" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.95"/>
+<!-- virgos distinctive tail crossing -->
+<path d="M22 28 C24 32 28 34 32 32 C36 30 38 26 36 22" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.91"/>
+<!-- cross through tail -->
+<path d="M28 22 L34 34" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.7"/>
+<circle cx="24" cy="24" r="14" fill="#ba57ff" opacity="0.04"/>
+
+</svg>

@@ -2,13 +2,13 @@
 
 <defs><radialGradient id="afr" cx="50%" cy="50%"><stop offset="0%" stop-color="#164e63"/><stop offset="100%" stop-color="#042f2e"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#afr)" stroke="#22d3ee" stroke-width="1.5"/>
-<line x1="24" y1="8" x2="24" y2="40" stroke="#a5f3fc" stroke-width=".8" opacity="0.56"/>
-<line x1="8" y1="24" x2="40" y2="24" stroke="#a5f3fc" stroke-width=".8" opacity="0.56"/>
-<line x1="12" y1="12" x2="36" y2="36" stroke="#a5f3fc" stroke-width=".6" opacity="0.4"/>
-<line x1="36" y1="12" x2="12" y2="36" stroke="#a5f3fc" stroke-width=".6" opacity="0.4"/>
-<path d="M24 14l3-3M24 14l-3-3" stroke="#a5f3fc" stroke-width=".5" opacity="0.48"/>
-<path d="M24 34l3 3M24 34l-3 3" stroke="#a5f3fc" stroke-width=".5" opacity="0.48"/>
-<path d="M14 24l-3-3M14 24l-3 3" stroke="#a5f3fc" stroke-width=".5" opacity="0.4"/>
-<path d="M34 24l3-3M34 24l3 3" stroke="#a5f3fc" stroke-width=".5" opacity="0.4"/>
+<line x1="24" y1="8" x2="24" y2="40" stroke="#ffffff" stroke-width=".8" opacity="0.95"/>
+<line x1="8" y1="24" x2="40" y2="24" stroke="#ffffff" stroke-width=".8" opacity="0.95"/>
+<line x1="12" y1="12" x2="36" y2="36" stroke="#ffffff" stroke-width=".6" opacity="0.95"/>
+<line x1="36" y1="12" x2="12" y2="36" stroke="#ffffff" stroke-width=".6" opacity="0.95"/>
+<path d="M24 14l3-3M24 14l-3-3" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<path d="M24 34l3 3M24 34l-3 3" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<path d="M14 24l-3-3M14 24l-3 3" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
+<path d="M34 24l3-3M34 24l3 3" stroke="#ffffff" stroke-width=".5" opacity="0.95"/>
 
 </svg>

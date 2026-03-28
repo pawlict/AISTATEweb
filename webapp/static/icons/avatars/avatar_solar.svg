@@ -2,7 +2,7 @@
 
 <defs><radialGradient id="aso" cx="50%" cy="50%"><stop offset="0%" stop-color="#92400e"/><stop offset="50%" stop-color="#431407"/><stop offset="100%" stop-color="#1c0806"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#aso)" stroke="#d97706" stroke-width="1.5"/>
-<circle cx="24" cy="24" r="8" stroke="#fbbf24" stroke-width="1" fill="#fbbf24" fill-opacity="0.24" opacity="0.8"/>
-<path d="M24 6v6M24 36v6M6 24h6M36 24h6M12 12l4 4M32 32l4 4M36 12l-4 4M12 36l4-4" stroke="#fbbf24" stroke-width=".8" opacity="0.48"/>
+<circle cx="24" cy="24" r="8" stroke="#ffff79" stroke-width="1" fill="#ffff79" fill-opacity="0.6" opacity="0.95"/>
+<path d="M24 6v6M24 36v6M6 24h6M36 24h6M12 12l4 4M32 32l4 4M36 12l-4 4M12 36l4-4" stroke="#ffff79" stroke-width=".8" opacity="0.95"/>
 
 </svg>

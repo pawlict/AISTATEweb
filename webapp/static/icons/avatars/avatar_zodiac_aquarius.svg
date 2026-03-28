@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="zaq" cx="50%" cy="50%"><stop offset="0%" stop-color="#164e63"/><stop offset="100%" stop-color="#042f2e"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#zaq)" stroke="#0891b2" stroke-width="1.5"/>
+<circle cx="8" cy="8" r=".7" fill="#ffffff" opacity="0.56"/>
+<circle cx="40" cy="10" r=".5" fill="#ffffff" opacity="0.49"/>
+<circle cx="6" cy="34" r=".6" fill="#ffffff" opacity="0.42"/>
+<circle cx="42" cy="38" r=".5" fill="#ffffff" opacity="0.35"/>
+<circle cx="18" cy="6" r=".4" fill="#ffffff" opacity="0.35"/>
+<circle cx="36" cy="6" r=".4" fill="#ffffff" opacity="0.28"/>
+<circle cx="44" cy="24" r=".5" fill="#ffffff" opacity="0.28"/>
+<circle cx="4" cy="20" r=".4" fill="#ffffff" opacity="0.28"/>
+<!-- upper wave - detailed zigzag -->
+<path d="M6 18 L10 14 L14 18 L18 14 L22 18 L26 14 L30 18 L34 14 L38 18 L42 14" stroke="#9affff" stroke-width="2.2" fill="none" opacity="0.95"/>
+<!-- lower wave -->
+<path d="M6 28 L10 24 L14 28 L18 24 L22 28 L26 24 L30 28 L34 24 L38 28 L42 24" stroke="#9affff" stroke-width="2.2" fill="none" opacity="0.91"/>
+<!-- water drops -->
+<circle cx="14" cy="36" r="1.5" stroke="#33ffff" stroke-width=".8" fill="#33ffff" fill-opacity="0.2" opacity="0.56"/>
+<circle cx="24" cy="38" r="1" stroke="#33ffff" stroke-width=".6" fill="none" opacity="0.42"/>
+<circle cx="34" cy="36" r="1.5" stroke="#33ffff" stroke-width=".8" fill="#33ffff" fill-opacity="0.2" opacity="0.49"/>
+<circle cx="24" cy="24" r="14" fill="#0cd9ff" opacity="0.04"/>
+
+</svg>

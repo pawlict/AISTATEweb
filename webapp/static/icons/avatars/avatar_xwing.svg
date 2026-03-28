@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="axw" cx="50%" cy="50%"><stop offset="0%" stop-color="#1c1917"/><stop offset="100%" stop-color="#0a0908"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#axw)" stroke="#f97316" stroke-width="1.5"/>
+<!-- fuselage -->
+<path d="M24 10v28" stroke="#ffffff" stroke-width="1.5" opacity="0.95"/>
+<!-- nose -->
+<path d="M22 10h4l-2-4z" stroke="#ffffff" stroke-width=".7" fill="#ffffff" fill-opacity="0.29" opacity="0.95"/>
+<!-- S-foils (X shape - attack position) -->
+<line x1="24" y1="16" x2="8" y2="8" stroke="#d1d5db" stroke-width="1" opacity="0.95"/>
+<line x1="24" y1="16" x2="40" y2="8" stroke="#d1d5db" stroke-width="1" opacity="0.95"/>
+<line x1="24" y1="32" x2="8" y2="40" stroke="#d1d5db" stroke-width="1" opacity="0.95"/>
+<line x1="24" y1="32" x2="40" y2="40" stroke="#d1d5db" stroke-width="1" opacity="0.95"/>
+<!-- laser cannons (tips) -->
+<circle cx="8" cy="8" r="1.5" fill="#fffdfd" opacity="0.95"/>
+<circle cx="40" cy="8" r="1.5" fill="#fffdfd" opacity="0.95"/>
+<circle cx="8" cy="40" r="1.5" fill="#fffdfd" opacity="0.95"/>
+<circle cx="40" cy="40" r="1.5" fill="#fffdfd" opacity="0.95"/>
+<!-- cockpit -->
+<ellipse cx="24" cy="20" rx="3" ry="4" stroke="#ffff87" stroke-width=".7" fill="#ffff87" fill-opacity="0.29" opacity="0.95"/>
+<!-- engine glow -->
+<circle cx="22" cy="38" r="1.5" fill="#ffff87" opacity="0.78"/>
+<circle cx="26" cy="38" r="1.5" fill="#ffff87" opacity="0.78"/>
+<!-- R2 unit -->
+<circle cx="24" cy="24" r="1.5" fill="#d8ffff" opacity="0.78"/>
+
+</svg>

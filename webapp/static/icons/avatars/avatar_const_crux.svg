@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+<defs><radialGradient id="cbg" cx="50%" cy="50%"><stop offset="0%" stop-color="#1a1a2e"/><stop offset="100%" stop-color="#06060e"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#cbg)" stroke="#f59e0b" stroke-width="1.5"/>
+<circle cx="6" cy="10" r=".5" fill="#ffffff" opacity="0.35"/><circle cx="42" cy="8" r=".5" fill="#ffffff" opacity="0.35"/><circle cx="8" cy="40" r=".5" fill="#ffffff" opacity="0.35"/><circle cx="44" cy="38" r=".5" fill="#ffffff" opacity="0.35"/><circle cx="18" cy="6" r=".5" fill="#ffffff" opacity="0.35"/><circle cx="34" cy="44" r=".5" fill="#ffffff" opacity="0.35"/>
+<line x1="24" y1="8" x2="24" y2="38" stroke="#dcffff" stroke-width=".6" opacity="0.56"/><line x1="12" y1="20" x2="36" y2="20" stroke="#dcffff" stroke-width=".6" opacity="0.56"/>
+<line x1="24" y1="8" x2="12" y2="20" stroke="#dcffff" stroke-width=".6" opacity="0.56"/><line x1="12" y1="20" x2="24" y2="38" stroke="#dcffff" stroke-width=".6" opacity="0.56"/><line x1="24" y1="38" x2="36" y2="20" stroke="#dcffff" stroke-width=".6" opacity="0.56"/><line x1="36" y1="20" x2="24" y2="8" stroke="#dcffff" stroke-width=".6" opacity="0.56"/>
+<circle cx="24" cy="8" r="2.2" fill="#ffffff" opacity="0.95"/><circle cx="24" cy="8" r="3.2" fill="#ffffff" opacity="0.11"/><circle cx="24" cy="38" r="2" fill="#ffffff" opacity="0.95"/><circle cx="24" cy="38" r="3" fill="#ffffff" opacity="0.11"/><circle cx="12" cy="20" r="2" fill="#ffffff" opacity="0.95"/><circle cx="12" cy="20" r="3" fill="#ffffff" opacity="0.11"/><circle cx="36" cy="20" r="2" fill="#ffffff" opacity="0.95"/><circle cx="36" cy="20" r="3" fill="#ffffff" opacity="0.11"/>
+<circle cx="28" cy="14" r="1.2" fill="#ffffff" opacity="0.95"/><circle cx="28" cy="14" r="2.2" fill="#ffffff" opacity="0.11"/>
+<text x="24" y="46" text-anchor="middle" font-size="5" fill="#ffff73" font-family="sans-serif" opacity="0.49">CRUX</text>
+
+</svg>

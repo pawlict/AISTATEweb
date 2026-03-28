@@ -2,11 +2,11 @@
 
 <defs><radialGradient id="ask" cx="50%" cy="45%"><stop offset="0%" stop-color="#374151"/><stop offset="100%" stop-color="#111827"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#ask)" stroke="#6b7280" stroke-width="1.5"/>
-<path d="M14 24c0-8 4-14 10-14s10 6 10 14v4c0 2-2 4-4 4h-12c-2 0-4-2-4-4z" stroke="#d1d5db" stroke-width=".8" fill="none" opacity="0.72"/>
-<circle cx="20" cy="22" r="3" stroke="#d1d5db" stroke-width=".8" fill="#d1d5db" fill-opacity="0.24" opacity="0.64"/>
-<circle cx="28" cy="22" r="3" stroke="#d1d5db" stroke-width=".8" fill="#d1d5db" fill-opacity="0.24" opacity="0.64"/>
-<path d="M22 28v4M26 28v4" stroke="#d1d5db" stroke-width=".6" opacity="0.48"/>
-<path d="M20 34v4M24 34v4M28 34v4" stroke="#d1d5db" stroke-width=".7" opacity="0.4"/>
-<path d="M18 28h12" stroke="#d1d5db" stroke-width=".5" opacity="0.32"/>
+<path d="M14 24c0-8 4-14 10-14s10 6 10 14v4c0 2-2 4-4 4h-12c-2 0-4-2-4-4z" stroke="#d1d5db" stroke-width=".8" fill="none" opacity="0.95"/>
+<circle cx="20" cy="22" r="3" stroke="#d1d5db" stroke-width=".8" fill="#d1d5db" fill-opacity="0.6" opacity="0.95"/>
+<circle cx="28" cy="22" r="3" stroke="#d1d5db" stroke-width=".8" fill="#d1d5db" fill-opacity="0.6" opacity="0.95"/>
+<path d="M22 28v4M26 28v4" stroke="#d1d5db" stroke-width=".6" opacity="0.95"/>
+<path d="M20 34v4M24 34v4M28 34v4" stroke="#d1d5db" stroke-width=".7" opacity="0.95"/>
+<path d="M18 28h12" stroke="#d1d5db" stroke-width=".5" opacity="0.95"/>
 
 </svg>

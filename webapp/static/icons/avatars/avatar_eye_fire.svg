@@ -2,11 +2,11 @@
 
 <defs><radialGradient id="aef" cx="50%" cy="50%"><stop offset="0%" stop-color="#92400e"/><stop offset="40%" stop-color="#7c2d12"/><stop offset="100%" stop-color="#1c0806"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#aef)" stroke="#dc2626" stroke-width="1.5"/>
-<ellipse cx="24" cy="24" rx="16" ry="8" stroke="#fca5a5" stroke-width="1.2" fill="none" opacity="0.8"/>
-<ellipse cx="24" cy="24" rx="12" ry="5" stroke="#fb923c" stroke-width=".8" fill="#fb923c" fill-opacity="0.15"/>
-<ellipse cx="24" cy="24" rx="3" ry="8" stroke="#fca5a5" stroke-width="1.5" fill="#fca5a5" fill-opacity="0.48"/>
-<circle cx="24" cy="24" r="2" fill="#fb923c" opacity="0.85"/>
-<path d="M8 24c4-10 12-14 16-14s12 4 16 14" stroke="#fca5a5" stroke-width=".6" fill="none" opacity="0.32"/>
-<path d="M8 24c4 10 12 14 16 14s12-4 16-14" stroke="#fca5a5" stroke-width=".6" fill="none" opacity="0.32"/>
+<ellipse cx="24" cy="24" rx="16" ry="8" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.95"/>
+<ellipse cx="24" cy="24" rx="12" ry="5" stroke="#ffffff" stroke-width=".8" fill="#ffffff" fill-opacity="0.6"/>
+<ellipse cx="24" cy="24" rx="3" ry="8" stroke="#ffffff" stroke-width="1.5" fill="#ffffff" fill-opacity="0.6"/>
+<circle cx="24" cy="24" r="2" fill="#ffffff" opacity="0.95"/>
+<path d="M8 24c4-10 12-14 16-14s12 4 16 14" stroke="#ffffff" stroke-width=".6" fill="none" opacity="0.95"/>
+<path d="M8 24c4 10 12 14 16 14s12-4 16-14" stroke="#ffffff" stroke-width=".6" fill="none" opacity="0.95"/>
 
 </svg>

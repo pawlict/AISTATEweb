@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="zg" cx="50%" cy="50%"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#0a1628"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#zg)" stroke="#3b82f6" stroke-width="1.5"/>
+<circle cx="8" cy="8" r=".7" fill="#ffffff" opacity="0.56"/>
+<circle cx="40" cy="10" r=".5" fill="#ffffff" opacity="0.49"/>
+<circle cx="6" cy="34" r=".6" fill="#ffffff" opacity="0.42"/>
+<circle cx="42" cy="38" r=".5" fill="#ffffff" opacity="0.35"/>
+<circle cx="18" cy="6" r=".4" fill="#ffffff" opacity="0.35"/>
+<circle cx="36" cy="6" r=".4" fill="#ffffff" opacity="0.28"/>
+<circle cx="44" cy="24" r=".5" fill="#ffffff" opacity="0.28"/>
+<circle cx="4" cy="20" r=".4" fill="#ffffff" opacity="0.28"/>
+<!-- twin pillars -->
+<line x1="18" y1="14" x2="18" y2="34" stroke="#dcffff" stroke-width="2" opacity="0.95"/>
+<line x1="30" y1="14" x2="30" y2="34" stroke="#dcffff" stroke-width="2" opacity="0.95"/>
+<!-- top arc connecting twins -->
+<path d="M12 14 C12 8 18 6 24 6 C30 6 36 8 36 14" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.91"/>
+<!-- bottom arc -->
+<path d="M12 34 C12 40 18 42 24 42 C30 42 36 40 36 34" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.91"/>
+<!-- mid connecting bars -->
+<line x1="18" y1="20" x2="30" y2="20" stroke="#90f7ff" stroke-width="1" opacity="0.49"/>
+<line x1="18" y1="28" x2="30" y2="28" stroke="#90f7ff" stroke-width="1" opacity="0.42"/>
+<circle cx="24" cy="24" r="14" fill="#58c3ff" opacity="0.04"/>
+
+</svg>

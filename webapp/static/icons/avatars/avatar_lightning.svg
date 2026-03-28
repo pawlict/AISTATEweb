@@ -2,6 +2,6 @@
 
 <defs><radialGradient id="ali" cx="50%" cy="50%"><stop offset="0%" stop-color="#422006"/><stop offset="100%" stop-color="#1c0a04"/></radialGradient></defs>
 <circle cx="24" cy="24" r="23" fill="url(#ali)" stroke="#d97706" stroke-width="1.5"/>
-<polygon points="28,6 16,26 22,26 18,42 34,20 27,20 32,6" stroke="#fbbf24" stroke-width=".8" fill="#fbbf24" fill-opacity="0.36" stroke-linejoin="round"/>
+<polygon points="28,6 16,26 22,26 18,42 34,20 27,20 32,6" stroke="#ffff79" stroke-width=".8" fill="#ffff79" fill-opacity="0.6" stroke-linejoin="round"/>
 
 </svg>
