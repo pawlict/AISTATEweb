@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-AISTATEweb (v3.7 beta) is a Python/FastAPI web application for audio transcription, speaker diarization, translation, LLM-powered analysis, and text-to-speech. It uses Whisper for ASR, pyannote.audio for diarization, NLLB-200 for translation, Ollama for LLM chat/analysis, and Piper/MMS/Kokoro for TTS. Data is stored as flat JSON files (no database).
+AISTATEweb (v3.7.2 beta) is a Python/FastAPI web application for audio transcription, speaker diarization, translation, LLM-powered analysis, and text-to-speech. It uses Whisper for ASR, pyannote.audio for diarization, NLLB-200 for translation, Ollama for LLM chat/analysis, and Piper/MMS/Kokoro for TTS. Data is stored as flat JSON files (no database).
 
 ## Quick Reference
 
@@ -191,3 +191,62 @@ Workers are invoked by `TaskManager` as separate Python processes. They:
 ## License
 
 MIT (main project). NLLB-200 models are CC-BY-NC 4.0 (non-commercial only). See `THIRD_PARTY_NOTICES.md` for full dependency licensing.
+
+## Recent Changes (Session 2026-03-28)
+
+### Crypto Reports (HTML/DOCX)
+- Section descriptions for analysts before each section
+- Charts: Saldo w czasie (normalized) + Graf przepływu (Cytoscape.js in HTML, matplotlib in DOCX)
+- Watermarks on all charts (AISTATEweb + date)
+- Dynamic "Wniosek koncowy" conclusion in DOCX with buy/sell/FIAT data
+- Removed: Autor, Przetworzono, Format eksportu, duplicate "AS IS" from all report headers/footers
+- "Czas mowienia" renamed to "Czas nagrania" with audio duration fallback
+- Portfel tokenow: removed Rank column, deduplicated (one table under risk)
+- Report body text justified
+
+### Transcription/Diarization
+- Analyst panel (collapsible left sidebar, matching GSM layout)
+- Tags on block notes (Neutralny, Poprawny, Podejrzany, Obserwacja) with colored left border on segments
+- `notes_filled.svg` icon for segments with saved notes
+- Notes saved to localStorage instantly (survives page navigation)
+- Toast notifications moved to global ui.js (top-right, auto-dismiss)
+- Speaker names moved above diarization result (separate card)
+- Note icons changed from markdown.svg to notes.svg
+- Removed "Pobierz TXT" button
+
+### Revolut Crypto PDF Parser
+- Fix: normalize `\xa0` (non-breaking space) in header detection
+- Wider detection: English variants, document type phrases without "revolut" text
+- Integration with AML pipeline (fallback when not recognized as bank statement)
+
+### ARIA Assistant
+- Draggable trigger icon (hexagon) with position saved to localStorage
+- HUD panel opens relative to trigger position
+- Fix: renamed `_initTriggerDrag` to avoid collision with HUD header drag
+
+### Other
+- Version bumped to 3.7.2 beta
+- Translation: auto-detect model cache, allow download (fix 5% stuck)
+- Translation reports: preserve formatting (newlines not collapsed)
+- Audio upload: clear stale transcription/diarization results
+- Dark mode: normalize icon brightness (invert for img, brighten for SVG)
+- Overscroll: prevent visible background transition
+- No-cache middleware for static JS/CSS files
+- Notes save endpoint: accept both string and {text, tags} format
+- `_probe_audio_basic`: mutagen + ffprobe fallback for MP3/OGG duration
+
+## Known Issues / Gotchas
+
+- **Browser cache**: Static JS/CSS files may be cached despite query string busting. No-cache middleware added but users may still need Ctrl+Shift+R after server restart.
+- **`backend/finance/__init__.py`**: Must NOT import from `.base` (file doesn't exist). If broken locally, fix with `git checkout -- backend/finance/__init__.py`.
+- **Revolut PDF**: Logo is image-only, detection relies on text phrases like "Wyciag z konta kryptowalutowego" or "crypto account statement".
+- **Translation worker**: `TRANSFORMERS_OFFLINE` is now auto-detected (checks HF cache). If NLLB model not cached, allows online download.
+- **ARIA drag**: Function must be named `_initTriggerDrag` (not `_initDrag`) to avoid collision with HUD header drag function at line ~352.
+
+## Pro Edition
+
+- Private repo: `pawlict/AISTATEweb_Pro` (currently empty, fork of Community)
+- License system exists: `backend/licensing/` with Ed25519 key validation, feature gating, admin UI
+- `LICENSING_ENABLED = False` in Community (all features open)
+- Plans defined: community, pro, enterprise (currently identical features)
+- Pro differentiation not yet implemented
