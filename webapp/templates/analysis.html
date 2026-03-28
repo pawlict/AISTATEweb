@@ -315,7 +315,29 @@
 
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
-  <div class="analyst-panel-layout">
+
+  <!-- Empty state (before upload) -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  <!-- Progress bar (outside panel layout so it's always visible) -->
+  <div class="an-progress" id="aml_progress">
+    <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
+    <div class="progress"><div id="aml_bar"></div></div>
+  </div>
+
+  <!-- Batch progress panel -->
+  <div class="card" id="aml_batch_panel" style="display:none">
+    <div class="analysis-sidehdr">
+      <div class="h2">Analiza wielu wyciągów</div>
+      <span class="small muted" id="aml_batch_counter"></span>
+    </div>
+    <div id="aml_batch_list" style="margin-top:8px"></div>
+    <div id="aml_batch_validation" style="display:none"></div>
+  </div>
+
+  <div class="analyst-panel-layout" id="aml_panel_layout" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="aml_analyst_panel">
@@ -388,23 +410,6 @@
 
     <!-- AML main content -->
     <div class="analyst-panel-main">
-
-    <!-- Progress bar (like transcription) -->
-    <div class="an-progress" id="aml_progress">
-      <div class="small">Status: <b id="aml_status">—</b> <span id="aml_pct"></span></div>
-      <div class="progress"><div id="aml_bar"></div></div>
-    </div>
-
-    <!-- Batch progress panel (shown during multi-file upload) -->
-    <div class="card" id="aml_batch_panel" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Analiza wielu wyciągów</div>
-        <span class="small muted" id="aml_batch_counter"></span>
-      </div>
-      <div id="aml_batch_list" style="margin-top:8px"></div>
-      <!-- Cross-validation removed — handled per-statement after opening -->
-      <div id="aml_batch_validation" style="display:none"></div>
-    </div>
 
     <!-- Results -->
     <div id="aml_results" style="display:none">
@@ -616,27 +621,35 @@
     </div>
 
     <!-- History -->
-    <div class="card" id="aml_history_card" style="display:none">
-      <div class="analysis-sidehdr">
-        <div class="h2">Historia analiz AML</div>
-        <span class="small muted" id="aml_history_count"></span>
-      </div>
-      <div id="aml_history_list" style="margin-top:10px"></div>
-    </div>
-
     </div><!-- /analyst-panel-main (AML) -->
   </div><!-- /analyst-panel-layout (AML) -->
 
-  <!-- Empty state (before upload) — outside layout so logo is centered -->
-  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  <!-- History card (outside panel layout) -->
+  <div class="card" id="aml_history_card" style="display:none">
+    <div class="analysis-sidehdr">
+      <div class="h2">Historia analiz AML</div>
+      <span class="small muted" id="aml_history_count"></span>
+    </div>
+    <div id="aml_history_list" style="margin-top:10px"></div>
   </div>
 
   </div><!-- /aml_content -->
 
   <!-- GSM Analysis content -->
   <div class="analysis-tab-content" id="gsm_content" style="display:none">
-  <div class="analyst-panel-layout">
+
+  <!-- Empty state (before upload) -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  <!-- Progress bar (outside panel layout) -->
+  <div class="an-progress" id="gsm_progress" style="display:none">
+    <div class="small">Status: <b id="gsm_status">—</b></div>
+    <div class="progress"><div id="gsm_bar"></div></div>
+  </div>
+
+  <div class="analyst-panel-layout" id="gsm_panel_layout" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="gsm_analyst_panel">
@@ -723,12 +736,6 @@
 
     <!-- GSM main content -->
     <div class="analyst-panel-main">
-
-    <!-- Progress bar -->
-    <div class="an-progress" id="gsm_progress" style="display:none">
-      <div class="small">Status: <b id="gsm_status">—</b></div>
-      <div class="progress"><div id="gsm_bar"></div></div>
-    </div>
 
     <!-- Results -->
     <div id="gsm_results" style="display:none">
@@ -1188,11 +1195,6 @@
 
     </div><!-- /analyst-panel-main (GSM) -->
   </div><!-- /analyst-panel-layout (GSM) -->
-
-  <!-- Empty state (before upload) — outside layout so logo is centered -->
-  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-  </div>
 
   </div><!-- /gsm_content -->
 

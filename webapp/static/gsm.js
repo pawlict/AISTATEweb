@@ -2086,7 +2086,9 @@
     if (!wrap) return;
     wrap.style.display = "";
 
-    // Hide empty state
+    // Show panel layout, hide empty state
+    const layout = QS("#gsm_panel_layout");
+    if (layout) layout.style.display = "";
     const empty = QS("#gsm_empty_state");
     if (empty) empty.style.display = "none";
 
