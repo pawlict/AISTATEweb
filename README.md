@@ -302,7 +302,7 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - Added NLLB Settings page
 - Added the ability to change task priorities
 - Added Chat LLM
-- Background sound analysis
+- Background sound analysis *(experimental)*
 
 ## beta 3.0 - 3.1
 - LLM Ollama modules for data analysis introduced

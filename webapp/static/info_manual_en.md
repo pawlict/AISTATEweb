@@ -42,7 +42,7 @@ Speech-to-Text module.
 - **Right-click** a block to open the inline editor — change text and speaker name.
 - All changes are saved automatically.
 
-### Sound detection
+### Sound detection *(experimental)*
 - If you have a sound detection model installed (YAMNet, PANNs, BEATs), enable the **Sound detection** option in the toolbar.
 - Detected sounds (cough, laughter, music, siren, etc.) will appear as markers in the text.
 
@@ -273,7 +273,7 @@ Task monitoring and system diagnostics.
 ### ASR Settings
 - Install Whisper models (tiny → large-v3).
 - Install NeMo ASR and diarization models.
-- Install sound detection models (YAMNet, PANNs, BEATs).
+- Install sound detection models (YAMNet, PANNs, BEATs) *(experimental)*.
 
 ### LLM Settings
 - Browse and install Ollama models (quick analysis, deep analysis, financial, proofreading, translation, vision/OCR).

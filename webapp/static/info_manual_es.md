@@ -42,7 +42,7 @@ Módulo de conversión de voz a texto.
 - **Clic derecho** en un bloque para abrir el editor en línea — modifique el texto y el nombre del hablante.
 - Todos los cambios se guardan automáticamente.
 
-### Detección de sonidos
+### Detección de sonidos *(experimental)*
 - Si tiene instalado un modelo de detección de sonidos (YAMNet, PANNs, BEATs), active la opción **Detección de sonidos** en la barra de herramientas.
 - Los sonidos detectados (tos, risa, música, sirena, etc.) aparecerán como marcadores en el texto.
 
@@ -273,7 +273,7 @@ Monitoreo de tareas y diagnóstico del sistema.
 ### Configuración de ASR
 - Instale modelos Whisper (tiny → large-v3).
 - Instale modelos de ASR y diarización NeMo.
-- Instale modelos de detección de sonido (YAMNet, PANNs, BEATs).
+- Instale modelos de detección de sonido (YAMNet, PANNs, BEATs) *(experimental)*.
 
 ### Configuración de LLM
 - Explore e instale modelos Ollama (análisis rápido, análisis profundo, financiero, corrección, traducción, visión/OCR).

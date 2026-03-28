@@ -302,7 +302,7 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - Añadida página de configuración de NLLB
 - Añadida la posibilidad de cambiar prioridades de tareas
 - Añadido Chat LLM
-- Análisis de sonido de fondo
+- Análisis de sonido de fondo *(experimental)*
 
 ## beta 3.0 - 3.1
 - Módulos LLM Ollama para análisis de datos introducidos
