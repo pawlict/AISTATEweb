@@ -196,6 +196,8 @@
   "common.close": "Fermer",
   "common.delete": "Supprimer",
   "common.confirm": "OK",
+  "projects.title": "Projets",
+  "projects.subprojects": "Projets",
   "common.logs_in_tab_html": "Les journaux sont disponibles dans l'onglet <b>Journaux</b>.",
   "common.progress": "Progression",
   "common.status": "Statut",

@@ -196,6 +196,8 @@
   "common.close": "Cerrar",
   "common.delete": "Eliminar",
   "common.confirm": "OK",
+  "projects.title": "Proyectos",
+  "projects.subprojects": "Proyectos",
   "common.logs_in_tab_html": "Los registros están disponibles en la pestaña <b>Registros</b>.",
   "common.progress": "Progreso",
   "common.status": "Estado",
