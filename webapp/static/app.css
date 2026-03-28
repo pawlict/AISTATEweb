@@ -207,6 +207,24 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   text-transform:uppercase;
   color:var(--muted);
   opacity:.85;
+  cursor:pointer;
+  user-select:none;
+  transition:color .2s, text-shadow .2s;
+  text-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.nav .nav-section:hover{
+  background:linear-gradient(90deg, #3b82f6, #a855f7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  opacity:1;
+  text-shadow:none;
+}
+.nav .nav-section.nav-section-collapsed{
+  opacity:.55;
+}
+.nav .nav-section.nav-section-collapsed:hover{
+  opacity:.85;
 }
 .nav a{
   padding:12px 12px;
@@ -3271,8 +3289,9 @@ button.pill-icon:hover{
   color:var(--muted,#888);
   opacity:.85;
   cursor:pointer;
-  transition:color .2s;
+  transition:color .2s, text-shadow .2s;
   user-select:none;
+  text-shadow:0 1px 3px rgba(0,0,0,.08);
 }
 .user-panel-settings-label:hover{
   background:linear-gradient(90deg, #3b82f6, #a855f7);
@@ -3280,6 +3299,7 @@ button.pill-icon:hover{
   -webkit-text-fill-color:transparent;
   background-clip:text;
   opacity:1;
+  text-shadow:none;
 }
 
 /* Avatar picker modal */
