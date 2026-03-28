@@ -936,7 +936,7 @@
     });
   })();
 
-  // Section toggles (dblclick to collapse/expand, like sidebar nav-sections)
+  // Section toggles (click to collapse/expand, like sidebar nav-sections)
   (function() {
     document.querySelectorAll('#tl_analyst_panel .analyst-panel-section-toggle').forEach(function(label) {
       var content = label.nextElementSibling;
@@ -946,7 +946,7 @@
         content.style.display = 'none';
         label.classList.add('nav-section-collapsed');
       }
-      label.addEventListener('dblclick', function() {
+      label.addEventListener('click', function() {
         var hidden = content.style.display === 'none';
         content.style.display = hidden ? '' : 'none';
         label.classList.toggle('nav-section-collapsed', !hidden);
