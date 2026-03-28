@@ -1840,6 +1840,16 @@ def require_existing_file(path: Path, msg: str) -> None:
 app = FastAPI(title=f"{APP_NAME} Web", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
+# Prevent aggressive browser caching of static JS/CSS files
+from starlette.middleware.base import BaseHTTPMiddleware
+class _NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/") and request.url.path.endswith((".js", ".css")):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+app.add_middleware(_NoCacheStaticMiddleware)
+
 # --- Mount auth/setup/users routers ---
 auth_router.init(
     user_store=USER_STORE,
