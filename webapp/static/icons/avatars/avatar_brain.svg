@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="ab1" cx="50%" cy="45%"><stop offset="0%" stop-color="#5b21b6"/><stop offset="100%" stop-color="#1e1b4b"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#ab1)" stroke="#7c3aed" stroke-width="1.5"/>
+<path d="M20 34c-4 0-7-3-7-7 0-2.5 1.5-4.5 3.5-6C15 19 16 16 19 14c2.5-1.5 5.5-1 7.5.5" stroke="#c4b5fd" stroke-width="1" fill="none" opacity="0.8"/>
+<path d="M28 34c4 0 7-3 7-7 0-2.5-1.5-4.5-3.5-6C33 19 32 16 29 14c-2.5-1.5-5.5-1-7.5.5" stroke="#c4b5fd" stroke-width="1" fill="none" opacity="0.72"/>
+<path d="M19 12c.5-2 2.5-4 5-4s4.5 2 5 4" stroke="#c4b5fd" stroke-width="1" fill="none" opacity="0.64"/>
+<path d="M15 22c2.5.5 5-1 7-2" stroke="#c4b5fd" stroke-width=".7" opacity="0.56"/>
+<path d="M33 22c-2.5.5-5-1-7-2" stroke="#c4b5fd" stroke-width=".7" opacity="0.48"/>
+<path d="M14 27c3 .5 6-1 8-2.5" stroke="#c4b5fd" stroke-width=".6" opacity="0.4"/>
+<path d="M34 27c-3 .5-6-1-8-2.5" stroke="#c4b5fd" stroke-width=".6" opacity="0.4"/>
+<line x1="24" y1="8" x2="24" y2="34" stroke="#c4b5fd" stroke-width=".5" opacity="0.24"/>
+
+</svg>

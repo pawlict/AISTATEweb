@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><linearGradient id="abr" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#020617"/></linearGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#abr)" stroke="#3b82f6" stroke-width="1.5"/>
+<ellipse cx="24" cy="20" rx="18" ry="10" stroke="#3b82f6" stroke-width=".7" fill="none" opacity="0.4"/>
+<path d="M24 10v2M16 14l1 1.5M32 14l-1 1.5M10 20h2M36 20h2" stroke="#bfdbfe" stroke-width=".8" opacity="0.56"/>
+<circle cx="24" cy="20" r="4" fill="#3b82f6" fill-opacity="0.24" stroke="#3b82f6" stroke-width=".6" opacity="0.56"/>
+<rect x="8" y="34" width="32" height="4" rx="2" stroke="#3b82f6" stroke-width=".7" fill="#3b82f6" fill-opacity="0.15" opacity="0.48"/>
+<circle cx="16" cy="36" r="1" fill="#bfdbfe" opacity="0.48"/>
+<circle cx="24" cy="36" r="1" fill="#bfdbfe" opacity="0.56"/>
+<circle cx="32" cy="36" r="1" fill="#bfdbfe" opacity="0.48"/>
+
+</svg>

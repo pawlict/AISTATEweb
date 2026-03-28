@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><radialGradient id="asg2" cx="50%" cy="50%"><stop offset="0%" stop-color="#60a5fa" stop-opacity=".15"/><stop offset="50%" stop-color="#1e3a5f" stop-opacity=".5"/><stop offset="100%" stop-color="#020617"/></radialGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#asg2)" stroke="#f59e0b" stroke-width="2"/>
+<circle cx="24" cy="24" r="19" stroke="#fbbf24" stroke-width="1" fill="none" opacity="0.56"/>
+<circle cx="24" cy="24" r="14" stroke="#bfdbfe" stroke-width=".6" fill="#bfdbfe" fill-opacity="0.15"/>
+<circle cx="24" cy="5" r="2" fill="#fbbf24" opacity="0.8"/>
+<circle cx="37" cy="10" r="1.5" fill="#fbbf24" opacity="0.64"/>
+<circle cx="43" cy="24" r="1.5" fill="#fbbf24" opacity="0.64"/>
+<circle cx="37" cy="38" r="1.5" fill="#fbbf24" opacity="0.56"/>
+<circle cx="24" cy="43" r="2" fill="#fbbf24" opacity="0.64"/>
+<circle cx="11" cy="38" r="1.5" fill="#fbbf24" opacity="0.56"/>
+<circle cx="5" cy="24" r="1.5" fill="#fbbf24" opacity="0.64"/>
+<circle cx="11" cy="10" r="1.5" fill="#fbbf24" opacity="0.64"/>
+<path d="M18 20c2-3 6-4 10-2s4 6 2 10" stroke="#bfdbfe" stroke-width=".5" fill="none" opacity="0.32"/>
+
+</svg>

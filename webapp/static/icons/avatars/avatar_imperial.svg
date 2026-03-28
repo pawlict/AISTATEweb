@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+
+<defs><linearGradient id="aim" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#1f2937"/><stop offset="100%" stop-color="#0a0a0f"/></linearGradient></defs>
+<circle cx="24" cy="24" r="23" fill="url(#aim)" stroke="#6b7280" stroke-width="1.5"/>
+<circle cx="24" cy="24" r="6" fill="none" stroke="#d1d5db" stroke-width="1" opacity="0.8"/>
+<circle cx="24" cy="24" r="3" fill="#d1d5db" opacity="0.24"/>
+<path d="M24 18v-10M24 30v10M18 24h-10M30 24h10" stroke="#d1d5db" stroke-width="1.5" opacity="0.56"/>
+<path d="M19.5 19.5L13 13M28.5 28.5L35 35M19.5 28.5L13 35M28.5 19.5L35 13" stroke="#d1d5db" stroke-width="1" opacity="0.4"/>
+<circle cx="24" cy="8" r="2" fill="#d1d5db" opacity="0.32"/>
+<circle cx="24" cy="40" r="2" fill="#d1d5db" opacity="0.32"/>
+<circle cx="8" cy="24" r="2" fill="#d1d5db" opacity="0.32"/>
+<circle cx="40" cy="24" r="2" fill="#d1d5db" opacity="0.32"/>
+
+</svg>
