@@ -3417,7 +3417,9 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 .confirm-overlay{
   position:fixed;
   inset:0;
-  background:rgba(0,0,0,.4);
+  background:rgba(15,23,42,.35);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -3429,18 +3431,23 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   opacity:1;
 }
 .confirm-box{
-  background:var(--card-bg,#fff);
-  border-radius:14px;
+  border:1px solid rgba(255,255,255,.45);
+  background:rgba(255,255,255,.48);
+  backdrop-filter:blur(22px) saturate(1.4);
+  -webkit-backdrop-filter:blur(22px) saturate(1.4);
+  border-radius:16px;
   padding:1.6rem 1.8rem 1.4rem;
-  box-shadow:0 12px 40px rgba(0,0,0,.18);
+  box-shadow:
+    0 12px 40px rgba(0,0,0,.10),
+    0 1px 0 rgba(255,255,255,.6) inset;
   width:90%;
   max-width:420px;
   position:relative;
-  transform:scale(.92);
-  transition:transform .2s ease;
+  transform:scale(.92) translateY(8px);
+  transition:transform .25s cubic-bezier(.22,1,.36,1);
 }
 .confirm-visible .confirm-box{
-  transform:scale(1);
+  transform:scale(1) translateY(0);
 }
 .confirm-close{
   position:absolute;
@@ -3491,9 +3498,9 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   align-items:center;
   gap:.4rem;
   padding:.55rem 1.2rem;
-  border:1.5px solid var(--border,#d0d5dd);
+  border:1.5px solid rgba(255,255,255,.4);
   border-radius:8px;
-  background:var(--card-bg,#fff);
+  background:rgba(255,255,255,.55);
   cursor:pointer;
   font-size:.84rem;
   font-weight:600;
@@ -3505,7 +3512,7 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
   flex-shrink:0;
 }
 .confirm-btn-cancel:hover{
-  background:rgba(0,0,0,.04);
+  background:rgba(255,255,255,.75);
   border-color:var(--muted,#888);
 }
 .confirm-btn-ok{
@@ -3532,12 +3539,17 @@ body.sidebar-collapsed .user-badge-compact-logout{ display:block; }
 
 /* Confirm modal dark mode */
 [data-theme="dark"] .confirm-box{
-  background:var(--panel,#1e293b);
+  background:rgba(22,33,55,.55);
+  border-color:rgba(255,255,255,.08);
   color:var(--text);
-  box-shadow:0 12px 40px rgba(0,0,0,.4);
+  box-shadow:
+    0 12px 40px rgba(0,0,0,.25),
+    0 1px 0 rgba(255,255,255,.05) inset;
 }
 [data-theme="dark"] .confirm-overlay{
-  background:rgba(0,0,0,.6);
+  background:rgba(0,0,0,.40);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
 }
 [data-theme="dark"] .confirm-close{
   filter:invert(.85);
