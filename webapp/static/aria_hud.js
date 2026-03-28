@@ -153,22 +153,19 @@
 
     el.addEventListener('mousedown', function(e) {
       if (e.button !== 0) return;
-      console.log('[ARIA drag] mousedown on trigger', e.target.tagName, e.target.id || e.target.className);
       dragging = true;
       moved = false;
-      downTime = Date.now();
       startX = e.clientX;
       startY = e.clientY;
       var rect = el.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
-      // Switch to left/top immediately
       el.style.left = startLeft + 'px';
       el.style.top = startTop + 'px';
       el.style.right = 'auto';
       el.style.bottom = 'auto';
       el.style.transition = 'none';
-      e.preventDefault(); // prevent text selection, button focus
+      e.preventDefault();
       e.stopPropagation();
     });
 
@@ -176,10 +173,7 @@
       if (!dragging) return;
       var dx = e.clientX - startX;
       var dy = e.clientY - startY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        if (!moved) console.log('[ARIA drag] started moving');
-        moved = true;
-      }
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
       if (!moved) return;
       var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
       var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
@@ -189,14 +183,11 @@
 
     document.addEventListener('mouseup', function() {
       if (!dragging) return;
-      console.log('[ARIA drag] mouseup, moved=' + moved);
       dragging = false;
       el.style.transition = '';
       if (moved) {
         _saveTriggerPosition();
-        console.log('[ARIA drag] position saved');
       } else {
-        console.log('[ARIA drag] toggling HUD');
         toggle();
       }
       moved = false;
@@ -279,9 +270,7 @@
 
   /* ---- Init ---- */
   function init() {
-    console.log('[ARIA] init() called');
     AriaHUD.$trigger       = document.getElementById('aria-trigger');
-    console.log('[ARIA] trigger element:', AriaHUD.$trigger);
     AriaHUD.$hud           = document.getElementById('aria-hud');
     AriaHUD.$messages      = document.getElementById('aria-messages');
     AriaHUD.$hints         = document.getElementById('aria-hints');
@@ -317,10 +306,8 @@
     var sesEl = document.getElementById('aria-st-ses');
     if (sesEl) sesEl.textContent = 'SES:' + AriaHUD.sessionId;
 
-    console.log('[ARIA] calling _initDrag on trigger');
     _initDrag(AriaHUD.$trigger);
     _restoreTriggerPosition();
-    console.log('[ARIA] drag initialized, trigger pointer-events:', window.getComputedStyle(AriaHUD.$trigger).pointerEvents);
     document.getElementById('aria-close')?.addEventListener('click', function () { setOpen(false); });
     AriaHUD.$sendBtn?.addEventListener('click', sendMessage);
     AriaHUD.$ttsBtn?.addEventListener('click', toggleTTS);
