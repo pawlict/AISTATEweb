@@ -315,7 +315,13 @@
 
   <!-- AML Analysis content -->
   <div class="analysis-tab-content" id="aml_content" style="display:none">
-  <div class="analyst-panel-layout">
+
+  <!-- Empty state (before upload) -->
+  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  <div class="analyst-panel-layout" id="aml_panel_layout" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="aml_analyst_panel">
@@ -627,16 +633,17 @@
     </div><!-- /analyst-panel-main (AML) -->
   </div><!-- /analyst-panel-layout (AML) -->
 
-  <!-- Empty state (before upload) — outside layout so logo is centered -->
-  <div id="aml_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_aml.png" alt="Moduł AML" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-  </div>
-
   </div><!-- /aml_content -->
 
   <!-- GSM Analysis content -->
   <div class="analysis-tab-content" id="gsm_content" style="display:none">
-  <div class="analyst-panel-layout">
+
+  <!-- Empty state (before upload) -->
+  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
+    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
+  </div>
+
+  <div class="analyst-panel-layout" id="gsm_panel_layout" style="display:none">
 
     <!-- Panel analityczny (collapsible left sidebar) -->
     <aside class="analyst-panel collapsed" id="gsm_analyst_panel">
@@ -1188,11 +1195,6 @@
 
     </div><!-- /analyst-panel-main (GSM) -->
   </div><!-- /analyst-panel-layout (GSM) -->
-
-  <!-- Empty state (before upload) — outside layout so logo is centered -->
-  <div id="gsm_empty_state" class="card" style="display:flex;align-items:center;justify-content:center;padding:40px 20px">
-    <img src="/static/logo_gsm.png" alt="Moduł GSM" style="width:70%;max-width:720px;min-width:280px" draggable="false">
-  </div>
 
   </div><!-- /gsm_content -->
 
