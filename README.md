@@ -1,6 +1,6 @@
 # AISTATEweb Community (3.7.2 beta)
 
-🇬🇧 [English](README.md) | 🇵🇱 [Polski](README.pl.md) | 🇰🇷 [한국어](README.ko.md)
+🇬🇧 [English](README.md) | 🇵🇱 [Polski](README.pl.md) | 🇰🇷 [한국어](README.ko.md) | 🇪🇸 [Español](README.es.md) | 🇫🇷 [Français](README.fr.md)
 
 ![Version](https://img.shields.io/badge/Version-3.7.2%20beta-orange)
 ![Edition](https://img.shields.io/badge/Edition-Community-blue)
