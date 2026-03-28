@@ -893,6 +893,15 @@ button.pill-icon:hover{
   flex-direction: column;
   gap: 14px;
 }
+.module-empty-state{
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+  padding:40px 20px;
+}
+.module-empty-state[style*="none"]{
+  display:none !important;
+}
 
 /* ===================== Info Page ===================== */
 .info-page{display:flex; flex-direction:column; gap:14px; padding-bottom:20px}
