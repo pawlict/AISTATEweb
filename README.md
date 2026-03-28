@@ -253,7 +253,6 @@ sudo apt purge -y 'nvidia-*' 'libnvidia-*' && sudo apt autoremove --purge -y
 - **Revolut crypto PDF** — parser for Revolut cryptocurrency statements, integrated with AML pipeline
 - **Token database (TOP 200)** — known/unknown token classification for crypto analysis
 - **Improved reports** — DOCX/HTML reports with charts, watermarks, dynamic conclusions, section descriptions
-- **ARIA trigger** — draggable floating trigger with position persistence and smart HUD placement
 - Fixed translation stuck at 5% (auto-detect model cache)
 - Fixed translation report losing formatting (newlines collapsed)
 - Fixed stale transcription/diarization results on new audio upload
