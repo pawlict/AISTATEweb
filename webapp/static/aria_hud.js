@@ -153,6 +153,7 @@
 
     el.addEventListener('mousedown', function(e) {
       if (e.button !== 0) return;
+      console.log('[ARIA drag] mousedown on trigger', e.target.tagName, e.target.id || e.target.className);
       dragging = true;
       moved = false;
       downTime = Date.now();
@@ -175,7 +176,10 @@
       if (!dragging) return;
       var dx = e.clientX - startX;
       var dy = e.clientY - startY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        if (!moved) console.log('[ARIA drag] started moving');
+        moved = true;
+      }
       if (!moved) return;
       var newLeft = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, startLeft + dx));
       var newTop = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, startTop + dy));
@@ -185,11 +189,14 @@
 
     document.addEventListener('mouseup', function() {
       if (!dragging) return;
+      console.log('[ARIA drag] mouseup, moved=' + moved);
       dragging = false;
       el.style.transition = '';
       if (moved) {
         _saveTriggerPosition();
+        console.log('[ARIA drag] position saved');
       } else {
+        console.log('[ARIA drag] toggling HUD');
         toggle();
       }
       moved = false;
