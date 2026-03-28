@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
+/* Toolbar groups: display:contents so children flow in the flex row */
+.tl-toolbar-group{ display:contents; }
 /* Translation-specific styles */
 .translation-container {
   display: flex;
@@ -542,9 +544,8 @@
       <div class="toolbar-sep"></div>
 
       <!-- Translation-only toolbar items -->
-      <div id="tl_toolbar_translation">
-        <!-- Sekcja: Modele / silniki -->
-        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+      <div id="tl_toolbar_translation" class="tl-toolbar-group">
+        <div class="toolbar-section">
           <div class="toolbar-group" id="translation_mode_box">
             <label class="toolbar-group-label" data-i18n="translation.label.mode"><img src="/static/icons/audio/speed.svg" alt="" draggable="false"> Tryb pracy</label>
             <div class="toolbar-group-controls">
@@ -573,8 +574,7 @@
 
         <div class="toolbar-sep"></div>
 
-        <!-- Sekcja: Raport -->
-        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+        <div class="toolbar-section">
           <div class="toolbar-group" id="translation_report_formats">
             <label class="toolbar-group-label" data-i18n="translation.label.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
             <div class="toolbar-group-controls">
@@ -589,8 +589,8 @@
       </div>
 
       <!-- Proofread-only toolbar items -->
-      <div id="tl_toolbar_proofread" style="display:none;">
-        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+      <div id="tl_toolbar_proofread" class="tl-toolbar-group" style="display:none;">
+        <div class="toolbar-section">
           <div class="toolbar-group" id="proofreading_group">
             <label class="toolbar-group-label">Korekta</label>
             <div class="toolbar-group-controls">
@@ -910,8 +910,8 @@
       tabs.forEach(function(t) { t.classList.toggle('active', t.getAttribute('data-tab') === which); });
       if (tabTranslation) tabTranslation.style.display = which === 'translation' ? '' : 'none';
       if (tabProofread) tabProofread.style.display = which === 'proofread' ? '' : 'none';
-      if (toolbarTranslation) toolbarTranslation.style.display = which === 'translation' ? '' : 'none';
-      if (toolbarProofread) toolbarProofread.style.display = which === 'proofread' ? '' : 'none';
+      if (toolbarTranslation) toolbarTranslation.style.display = which === 'translation' ? 'contents' : 'none';
+      if (toolbarProofread) toolbarProofread.style.display = which === 'proofread' ? 'contents' : 'none';
       // Switch Generate button action
       if (genBtn) {
         if (which === 'proofread') {
