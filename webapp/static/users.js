@@ -15,7 +15,7 @@
     projects:       { pl: 'Projekty',       en: 'Projects' },
     transcription:  { pl: 'Transkrypcja',   en: 'Transcription' },
     diarization:    { pl: 'Diaryzacja',     en: 'Diarization' },
-    translation:    { pl: 'Tłumaczenia',    en: 'Translation' },
+    translation:    { pl: 'Transformacje',    en: 'Transformations' },
     analysis:       { pl: 'Analiza',        en: 'Analysis' },
     chat:           { pl: 'Czat / LLM',     en: 'Chat / LLM' },
     admin_settings: { pl: 'Panel admina',   en: 'Admin panel' },

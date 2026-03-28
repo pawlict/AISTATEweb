@@ -3,20 +3,18 @@
 <style>
 /* Translation-specific styles */
 .translation-container {
-  display: grid;
-  grid-template-columns: 330px 1fr;
-  gap: 14px;
+  display: flex;
+  gap: 0;
   min-height: calc(100vh - 220px);
 }
 
 .translation-sidebar {
-  width: auto;
-  flex-shrink: 0;
-  overflow: auto;
-  padding-right: 0;
+  display: none; /* replaced by analyst panel */
 }
 
 .translation-main {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -670,98 +668,95 @@
     </div>
   </div>
 
-  <div class="translation-container analysis-container">
+  <div class="analyst-panel-layout translation-container">
 
-    <!-- SIDEBAR -->
-    <div class="translation-sidebar analysis-sidebar">
-
-      <!-- LANGUAGES -->
-      <div class="section">
-        <div class="section-title" data-i18n="translation.languages">Języki</div>
-
-        <label style="font-size: 12px; font-weight: 600; margin-bottom: 5px; display: block;">
-          <span data-i18n="translation.label.source_lang">Język źródłowy:</span>
-        </label>
-        <select id="source_lang" class="input" style="width: 100%; margin-bottom: 10px;">
-          <option value="auto" data-i18n="translation.lang_option.auto">🔍 Automatyczne wykrywanie</option>
-          <option value="polish" data-i18n="translation.lang_option.polish">🇵🇱 Polski</option>
-          <option value="english" data-i18n="translation.lang_option.english">🇬🇧 Angielski</option>
-          <option value="russian" data-i18n="translation.lang_option.russian">🇷🇺 Rosyjski</option>
-          <option value="belarusian" data-i18n="translation.lang_option.belarusian">🇧🇾 Białoruski</option>
-          <option value="ukrainian" data-i18n="translation.lang_option.ukrainian">🇺🇦 Ukraiński</option>
-          <option value="chinese" data-i18n="translation.lang_option.chinese">🇨🇳 Chiński</option>
-          <option value="korean" data-i18n="translation.lang_option.korean">🇰🇷 Koreański</option>
-        </select>
-
-        <label style="font-size: 12px; font-weight: 600; margin-bottom: 5px; display: block;">
-          <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
-        </label>
-        <div class="lang-checkboxes">
-          <label class="lang-checkbox">
-            <input type="checkbox" value="english"/> <span data-i18n="translation.lang_label.english">🇬🇧 Angielski</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="russian"/> <span data-i18n="translation.lang_label.russian">🇷🇺 Rosyjski</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="ukrainian"/> <span data-i18n="translation.lang_label.ukrainian">🇺🇦 Ukraiński</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="belarusian"/> <span data-i18n="translation.lang_label.belarusian">🇧🇾 Białoruski</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="chinese"/> <span data-i18n="translation.lang_label.chinese">🇨🇳 Chiński</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="polish"/> <span data-i18n="translation.lang_label.polish">🇵🇱 Polski</span>
-          </label>
-          <label class="lang-checkbox">
-            <input type="checkbox" value="korean"/> <span data-i18n="translation.lang_label.korean">🇰🇷 Koreański</span>
-          </label>
+    <!-- ANALYST PANEL (collapsible left sidebar) -->
+    <aside class="analyst-panel collapsed" id="tl_analyst_panel">
+      <button class="analyst-panel-toggle" id="tl_panel_toggle" title="Panel analityczny">
+        <img src="/static/icons/akcje/sidebar_expand.svg" alt="" width="18" height="18" draggable="false">
+      </button>
+      <div class="analyst-panel-body">
+        <div class="analyst-panel-header">
+          <div class="h2" style="margin:0;font-size:15px;display:flex;align-items:center;gap:6px">
+            <img src="/static/icons/dokumenty/notes.svg" alt="" width="16" height="16" draggable="false">
+            <span data-i18n="analyst_panel.title">Panel analityczny</span>
+          </div>
+          <button class="analyst-panel-toggle-inner" id="tl_panel_collapse" title="Zwiń panel">
+            <img src="/static/icons/akcje/sidebar_collapse.svg" alt="" width="16" height="16" draggable="false">
+          </button>
         </div>
-      </div>
+        <div class="analyst-panel-divider"></div>
 
-      <!-- OPTIONS -->
-      <div class="section">
-        <div class="section-title" data-i18n="translation.options">Opcje</div>
-
-        <label class="lang-checkbox">
-          <input type="checkbox" id="generate_summary"/>
-          <span data-i18n="translation.opt.generate_summary">Generuj podsumowanie</span>
-        </label>
-
-        <label class="lang-checkbox">
-          <input type="checkbox" id="use_glossary"/>
-          <span data-i18n="translation.opt.use_glossary">Użyj słownika terminów</span>
-        </label>
-
-        <label class="lang-checkbox">
-          <input type="checkbox" id="preserve_formatting" checked/>
-          <span data-i18n="translation.opt.preserve_formatting">Zachowaj formatowanie</span>
-        </label>
-
-        <div class="slider-container" id="summary-detail-container" style="display: none;">
-          <label style="font-size: 12px;"><span data-i18n="translation.summary_detail.label">Szczegółowość podsumowania:</span></label>
-          <input type="range" min="1" max="10" value="5" class="slider" id="summary_detail"/>
-          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666;">
-            <span data-i18n="translation.summary_detail.short">Krótkie</span>
-            <span data-i18n="translation.summary_detail.detailed">Szczegółowe</span>
+        <!-- LANGUAGES -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/inne/language.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="translation.languages">Języki</span>
+          </div>
+          <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
+            <span data-i18n="translation.label.source_lang">Język źródłowy:</span>
+          </label>
+          <select id="source_lang" class="input" style="width:100%;margin-bottom:10px;">
+            <option value="auto" data-i18n="translation.lang_option.auto">🔍 Automatyczne wykrywanie</option>
+            <option value="polish" data-i18n="translation.lang_option.polish">🇵🇱 Polski</option>
+            <option value="english" data-i18n="translation.lang_option.english">🇬🇧 Angielski</option>
+            <option value="russian" data-i18n="translation.lang_option.russian">🇷🇺 Rosyjski</option>
+            <option value="belarusian" data-i18n="translation.lang_option.belarusian">🇧🇾 Białoruski</option>
+            <option value="ukrainian" data-i18n="translation.lang_option.ukrainian">🇺🇦 Ukraiński</option>
+            <option value="chinese" data-i18n="translation.lang_option.chinese">🇨🇳 Chiński</option>
+            <option value="korean" data-i18n="translation.lang_option.korean">🇰🇷 Koreański</option>
+          </select>
+          <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
+            <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
+          </label>
+          <div class="lang-checkboxes">
+            <label class="lang-checkbox"><input type="checkbox" value="english"/> <span data-i18n="translation.lang_label.english">🇬🇧 Angielski</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="russian"/> <span data-i18n="translation.lang_label.russian">🇷🇺 Rosyjski</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="ukrainian"/> <span data-i18n="translation.lang_label.ukrainian">🇺🇦 Ukraiński</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="belarusian"/> <span data-i18n="translation.lang_label.belarusian">🇧🇾 Białoruski</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="chinese"/> <span data-i18n="translation.lang_label.chinese">🇨🇳 Chiński</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="polish"/> <span data-i18n="translation.lang_label.polish">🇵🇱 Polski</span></label>
+            <label class="lang-checkbox"><input type="checkbox" value="korean"/> <span data-i18n="translation.lang_label.korean">🇰🇷 Koreański</span></label>
           </div>
         </div>
-      </div>
+        <div class="analyst-panel-divider"></div>
 
-      <!-- PRESETS -->
-      <div class="section">
-        <div class="section-title" data-i18n="translation.presets">Predefiniowane</div>
-        <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
-        <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
-        <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
-      </div>
+        <!-- OPTIONS -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/akcje/filter.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="translation.options">Opcje</span>
+          </div>
+          <label class="lang-checkbox"><input type="checkbox" id="generate_summary"/> <span data-i18n="translation.opt.generate_summary">Generuj podsumowanie</span></label>
+          <label class="lang-checkbox"><input type="checkbox" id="use_glossary"/> <span data-i18n="translation.opt.use_glossary">Użyj słownika terminów</span></label>
+          <label class="lang-checkbox"><input type="checkbox" id="preserve_formatting" checked/> <span data-i18n="translation.opt.preserve_formatting">Zachowaj formatowanie</span></label>
+          <div class="slider-container" id="summary-detail-container" style="display:none;">
+            <label style="font-size:12px;"><span data-i18n="translation.summary_detail.label">Szczegółowość podsumowania:</span></label>
+            <input type="range" min="1" max="10" value="5" class="slider" id="summary_detail"/>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#666;">
+              <span data-i18n="translation.summary_detail.short">Krótkie</span>
+              <span data-i18n="translation.summary_detail.detailed">Szczegółowe</span>
+            </div>
+          </div>
+        </div>
+        <div class="analyst-panel-divider"></div>
 
-    </div>
+        <!-- PRESETS -->
+        <div class="analyst-panel-section">
+          <div class="analyst-panel-label">
+            <img src="/static/icons/akcje/generate.svg" alt="" width="14" height="14" draggable="false">
+            <span data-i18n="translation.presets">Predefiniowane</span>
+          </div>
+          <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
+          <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
+          <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
+        </div>
+
+      </div>
+    </aside>
 
     <!-- MAIN AREA -->
-    <div class="translation-main analysis-main">
+    <div class="analyst-panel-main translation-main">
 
       <!-- FILE INFO -->
       <div id="file-info" class="file-info hidden">
@@ -925,6 +920,25 @@
   </div>
 
   <script src="/static/translation.js?v={{ app_version }}&_={{ static_ts }}"></script>
+  <script>
+  // Analyst Panel Toggle (translation module)
+  (function() {
+    var panel = document.getElementById("tl_analyst_panel");
+    var toggleBtn = document.getElementById("tl_panel_toggle");
+    var collapseBtn = document.getElementById("tl_panel_collapse");
+    if (!panel) return;
+    var lsKey = "aistate_analyst_panel_tl";
+    if (localStorage.getItem(lsKey) === "open") panel.classList.remove("collapsed");
+    if (toggleBtn) toggleBtn.addEventListener("click", function() {
+      panel.classList.remove("collapsed");
+      localStorage.setItem(lsKey, "open");
+    });
+    if (collapseBtn) collapseBtn.addEventListener("click", function() {
+      panel.classList.add("collapsed");
+      localStorage.setItem(lsKey, "collapsed");
+    });
+  })();
+  </script>
 </div>
 
 {% endblock %}
