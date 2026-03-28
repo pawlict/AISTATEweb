@@ -46,6 +46,7 @@ const ROLE_LABELS = {
 // --- Modal helpers (with animation) ---
 function showModal(id){
   var el = document.getElementById(id);
+  el.classList.add('modal-anim');
   el.style.display = 'flex';
   // Force reflow so CSS transition triggers
   el.offsetHeight;
@@ -54,7 +55,10 @@ function showModal(id){
 function hideModal(id){
   var el = document.getElementById(id);
   el.classList.remove('modal-open');
-  setTimeout(function(){ el.style.display = 'none'; }, 250);
+  setTimeout(function(){
+    el.style.display = 'none';
+    el.classList.remove('modal-anim');
+  }, 250);
 }
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if(e.target === m) hideModal(m.id); });

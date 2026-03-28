@@ -207,6 +207,24 @@ body.sidebar-collapsed .sidebar-toggle .ico-expand{display:block}
   text-transform:uppercase;
   color:var(--muted);
   opacity:.85;
+  cursor:pointer;
+  user-select:none;
+  transition:color .2s, text-shadow .2s;
+  text-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.nav .nav-section:hover{
+  background:linear-gradient(90deg, #3b82f6, #a855f7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  opacity:1;
+  text-shadow:none;
+}
+.nav .nav-section.nav-section-collapsed{
+  opacity:.55;
+}
+.nav .nav-section.nav-section-collapsed:hover{
+  opacity:.85;
 }
 .nav a{
   padding:12px 12px;
@@ -525,11 +543,18 @@ textarea{min-height:220px; resize:vertical}
   background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+}
+.modal-overlay[style*="display: none"],
+.modal-overlay[style*="display:none"]{
   opacity:0;
-  transition: opacity .25s ease;
   pointer-events:none;
 }
-.modal-overlay.modal-open{
+.modal-overlay.modal-anim{
+  opacity:0;
+  pointer-events:none;
+  transition: opacity .25s ease;
+}
+.modal-overlay.modal-anim.modal-open{
   opacity:1;
   pointer-events:auto;
 }
@@ -546,10 +571,12 @@ textarea{min-height:220px; resize:vertical}
     0 8px 32px rgba(15,23,42,.10),
     0 1px 0 rgba(255,255,255,.6) inset;
   padding: 20px;
+}
+.modal-anim .modal-panel{
   transform: scale(.96) translateY(8px);
   transition: transform .25s cubic-bezier(.22,1,.36,1);
 }
-.modal-overlay.modal-open .modal-panel{
+.modal-anim.modal-open .modal-panel{
   transform: scale(1) translateY(0);
 }
 .modal-header{
@@ -3262,8 +3289,9 @@ button.pill-icon:hover{
   color:var(--muted,#888);
   opacity:.85;
   cursor:pointer;
-  transition:color .2s;
+  transition:color .2s, text-shadow .2s;
   user-select:none;
+  text-shadow:0 1px 3px rgba(0,0,0,.08);
 }
 .user-panel-settings-label:hover{
   background:linear-gradient(90deg, #3b82f6, #a855f7);
@@ -3271,6 +3299,7 @@ button.pill-icon:hover{
   -webkit-text-fill-color:transparent;
   background-clip:text;
   opacity:1;
+  text-shadow:none;
 }
 
 /* Avatar picker modal */

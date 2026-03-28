@@ -326,7 +326,30 @@ function initSidebar(){
         applyI18n();
       });
     }
+
+    // Nav-section collapse/expand on double-click
+    document.querySelectorAll(".nav .nav-section").forEach(function(section){
+      var key = "aistate_navsec_" + (section.getAttribute("data-i18n") || section.textContent.trim());
+      // Restore saved state
+      if(localStorage.getItem(key) === "1"){
+        section.classList.add("nav-section-collapsed");
+        _toggleNavSectionLinks(section, true);
+      }
+      section.addEventListener("dblclick", function(){
+        var isCollapsed = section.classList.toggle("nav-section-collapsed");
+        _toggleNavSectionLinks(section, isCollapsed);
+        localStorage.setItem(key, isCollapsed ? "1" : "0");
+      });
+    });
   }catch(e){}
+}
+
+function _toggleNavSectionLinks(section, hide){
+  var el = section.nextElementSibling;
+  while(el && !el.classList.contains("nav-section")){
+    el.style.display = hide ? "none" : "";
+    el = el.nextElementSibling;
+  }
 }
 
 // ---------- Global state: current project ----------
