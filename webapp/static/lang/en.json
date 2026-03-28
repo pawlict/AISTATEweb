@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Concentric layout (risk)",
   "common.cancel": "Cancel",
   "common.close": "Close",
+  "common.delete": "Delete",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Logs are available in the <b>Logs</b> tab.",
   "common.progress": "Progress",
   "common.status": "Status",

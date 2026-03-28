@@ -1008,6 +1008,106 @@ window.getProjectAudioUrl = getProjectAudioUrl;
 window.attachSegmentGuards = attachSegmentGuards;
 
 
+// ===== Confirm modal (replaces browser confirm()) =====
+// Usage: const ok = await confirmModal({ message: 'Delete?', icon: '/static/icons/projekty/project_delete.svg', danger: true });
+function confirmModal(opts){
+  opts = opts || {};
+  var message = opts.message || 'Are you sure?';
+  var icon = opts.icon || '';
+  var danger = opts.danger || false;
+  var confirmLabel = opts.confirmLabel || (danger ? t('common.delete') : t('common.confirm'));
+  var cancelLabel = opts.cancelLabel || t('common.cancel');
+  var confirmIcon = opts.confirmIcon || '/static/icons/akcje/accept.svg';
+  var cancelIcon = opts.cancelIcon || '/static/icons/akcje/cancel.svg';
+
+  return new Promise(function(resolve){
+    // Remove any existing confirm modal
+    var existing = document.getElementById('aistateConfirmModal');
+    if(existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'aistateConfirmModal';
+    overlay.className = 'confirm-overlay';
+
+    var box = document.createElement('div');
+    box.className = 'confirm-box';
+
+    // Close button (top-right)
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'confirm-close';
+    closeBtn.type = 'button';
+    closeBtn.title = t('common.close');
+    closeBtn.innerHTML = '<img src="/static/icons/akcje/close.svg" alt="close" width="18" height="18">';
+
+    // Icon
+    var iconHtml = '';
+    if(icon){
+      iconHtml = '<div class="confirm-icon' + (danger ? ' confirm-icon-danger' : '') + '"><img src="' + icon + '" alt="" width="44" height="44"></div>';
+    }
+
+    // Message
+    var msgEl = document.createElement('div');
+    msgEl.className = 'confirm-message';
+    msgEl.innerHTML = iconHtml + '<p>' + message + '</p>';
+
+    // Buttons
+    var btns = document.createElement('div');
+    btns.className = 'confirm-buttons';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'confirm-btn confirm-btn-cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.innerHTML = '<img src="' + cancelIcon + '" alt="" width="16" height="16"><span>' + cancelLabel + '</span>';
+
+    var okBtn = document.createElement('button');
+    okBtn.className = 'confirm-btn confirm-btn-ok' + (danger ? ' confirm-btn-danger' : '');
+    okBtn.type = 'button';
+    okBtn.innerHTML = '<img src="' + confirmIcon + '" alt="" width="16" height="16"><span>' + confirmLabel + '</span>';
+
+    btns.appendChild(cancelBtn);
+    btns.appendChild(okBtn);
+
+    box.appendChild(closeBtn);
+    box.appendChild(msgEl);
+    box.appendChild(btns);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Animate in
+    requestAnimationFrame(function(){
+      overlay.classList.add('confirm-visible');
+    });
+
+    function close(result){
+      overlay.classList.remove('confirm-visible');
+      setTimeout(function(){ overlay.remove(); }, 200);
+      resolve(result);
+    }
+
+    closeBtn.addEventListener('click', function(){ close(false); });
+    cancelBtn.addEventListener('click', function(){ close(false); });
+    okBtn.addEventListener('click', function(){ close(true); });
+    overlay.addEventListener('click', function(e){ if(e.target === overlay) close(false); });
+
+    // Keyboard: Escape = cancel, Enter = confirm
+    function onKey(e){
+      if(e.key === 'Escape'){ e.preventDefault(); close(false); }
+      if(e.key === 'Enter'){ e.preventDefault(); close(true); }
+    }
+    document.addEventListener('keydown', onKey, {once: false});
+    // Cleanup listener when modal closes
+    var origClose = close;
+    close = function(result){
+      document.removeEventListener('keydown', onKey);
+      origClose(result);
+    };
+
+    // Focus OK button for keyboard accessibility
+    okBtn.focus();
+  });
+}
+window.confirmModal = confirmModal;
+
 // ===== Block editor modal =====
 function ensureModal(){
   let m = document.getElementById("aistate_modal");

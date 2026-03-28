@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Disposition concentrique (risque)",
   "common.cancel": "Annuler",
   "common.close": "Fermer",
+  "common.delete": "Supprimer",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Les journaux sont disponibles dans l'onglet <b>Journaux</b>.",
   "common.progress": "Progression",
   "common.status": "Statut",

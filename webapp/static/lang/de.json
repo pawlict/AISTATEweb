@@ -194,6 +194,8 @@
   "aml.layout.concentric": "Konzentrisches Layout (Risiko)",
   "common.cancel": "Abbrechen",
   "common.close": "Schließen",
+  "common.delete": "Löschen",
+  "common.confirm": "OK",
   "common.logs_in_tab_html": "Protokolle sind im Tab <b>Protokolle</b> verfügbar.",
   "common.progress": "Fortschritt",
   "common.status": "Status",
