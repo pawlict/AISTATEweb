@@ -521,11 +521,6 @@
   <div class="card analysis-toolbar translation-toolbar" id="translation_toolbar">
     <div class="analysis-toolbar-left">
       <div class="h1" style="margin:0"><i data-icon="translation" data-size="40"></i> <span data-i18n="translation.page_title">Transformacje</span></div>
-      <!-- Tab cards (like Analysis LLM/AML/GSM/Crypto) -->
-      <div class="analysis-tabs" style="margin-left:18px;">
-        <button class="analysis-tab active" data-tab="translation" data-i18n="translation.tab.translation">Tłumaczenie</button>
-        <button class="analysis-tab" data-tab="proofread" data-i18n="translation.tab.proofread">Korekta</button>
-      </div>
     </div>
 
     <div class="analysis-toolbar-right">
@@ -665,6 +660,12 @@
       </div><!-- /tl_toolbar_proofread -->
 
     </div>
+  </div>
+
+  <!-- Tab bar (below toolbar, like Analysis) -->
+  <div class="analysis-tabs" id="translation_tabs">
+    <button class="analysis-tab active" data-tab="translation" data-i18n="translation.tab.translation">Tłumaczenie</button>
+    <button class="analysis-tab" data-tab="proofread" data-i18n="translation.tab.proofread">Korekta</button>
   </div>
 
   <div class="analyst-panel-layout translation-container">
@@ -898,7 +899,7 @@
 
   // Tab switching: Tłumaczenie / Korekta
   (function() {
-    var tabs = document.querySelectorAll('#translation_toolbar .analysis-tab[data-tab]');
+    var tabs = document.querySelectorAll('#translation_tabs .analysis-tab[data-tab]');
     var tabTranslation = document.getElementById('tl_tab_translation');
     var tabProofread = document.getElementById('tl_tab_proofread');
     var toolbarTranslation = document.getElementById('tl_toolbar_translation');
