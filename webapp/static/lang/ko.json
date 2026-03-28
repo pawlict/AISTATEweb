@@ -702,6 +702,8 @@
   "translation.options": "옵션",
   "translation.output.placeholder": "번역된 텍스트가 여기에 표시됩니다...",
   "translation.page_title": "변환",
+  "translation.tab.translation": "번역",
+  "translation.tab.proofread": "교정",
   "translation.proofread_accept": "교정 수락 — 변경 표시 제거",
   "translation.proofread_copy": "교정된 텍스트 복사",
   "translation.proofread_en": "영어 텍스트 교정",

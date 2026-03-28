@@ -702,6 +702,8 @@
   "translation.options": "Параметри",
   "translation.output.placeholder": "Перекладений текст з'явиться тут...",
   "translation.page_title": "Трансформації",
+  "translation.tab.translation": "Переклад",
+  "translation.tab.proofread": "Коректура",
   "translation.proofread_accept": "Прийняти виправлення — прибрати позначки змін",
   "translation.proofread_copy": "Копіювати виправлений текст",
   "translation.proofread_en": "Перевірити англійський текст",

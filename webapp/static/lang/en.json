@@ -703,6 +703,8 @@
   "translation.options": "Options",
   "translation.output.placeholder": "Translated text will appear here...",
   "translation.page_title": "Transformations",
+  "translation.tab.translation": "Translation",
+  "translation.tab.proofread": "Proofreading",
   "translation.proofread_accept": "Accept corrections — clear change markers",
   "translation.proofread_copy": "Copy corrected text",
   "translation.proofread_en": "Proofread English text",
