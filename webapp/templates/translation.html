@@ -521,11 +521,16 @@
   <div class="card analysis-toolbar translation-toolbar" id="translation_toolbar">
     <div class="analysis-toolbar-left">
       <div class="h1" style="margin:0"><i data-icon="translation" data-size="40"></i> <span data-i18n="translation.page_title">Transformacje</span></div>
+      <!-- Tab cards (like Analysis LLM/AML/GSM/Crypto) -->
+      <div class="analysis-tabs" style="margin-left:18px;">
+        <button class="analysis-tab active" data-tab="translation" data-i18n="translation.tab.translation">Tłumaczenie</button>
+        <button class="analysis-tab" data-tab="proofread" data-i18n="translation.tab.proofread">Korekta</button>
+      </div>
     </div>
 
     <div class="analysis-toolbar-right">
 
-      <!-- Sekcja 0: Import pliku -->
+      <!-- Sekcja 0: Import pliku (shared) -->
       <div class="toolbar-section">
         <input type="file" id="file-input" accept=".txt,.doc,.docx,.pdf,.srt,.pptx" style="display:none"/>
         <button class="btn pill-icon" id="tr_import_btn" title="Importuj dokument (TXT, DOC, DOCX, PDF, SRT, PPTX)" data-i18n-title="translation.btn.import_file" onclick="document.getElementById('file-input').click()"><img src="/static/icons/pliki/file_add_audio.svg" alt="Import" draggable="false"></button>
@@ -534,42 +539,85 @@
 
       <div class="toolbar-sep"></div>
 
-      <!-- Sekcja 1: Generuj -->
+      <!-- Sekcja 1: Generuj (shared, action changes per tab) -->
       <div class="toolbar-section">
         <button class="btn pill-icon" id="generate-btn" title="Tłumacz" data-i18n-title="translation.generate_tooltip" onclick="startTranslation()"><img src="/static/icons/akcje/generate_ai.svg" alt="Tłumacz" draggable="false"></button>
       </div>
 
       <div class="toolbar-sep"></div>
 
-      <!-- Sekcja 2: Korekta tekstu (PL / EN) -->
-      <div class="toolbar-section">
-        <div class="toolbar-group" id="proofreading_group">
-          <label class="toolbar-group-label">Korekta</label>
-          <div class="toolbar-group-controls">
-            <label class="pill pill-icon pill-icon-mag" title="Korekta tekstu polskiego" data-i18n-title="translation.proofread_pl">
-              <input type="radio" name="proofread_lang" value="pl">
-              <svg viewBox="0 0 28 28" fill="none"><circle cx="12" cy="12" r="7" stroke="#1096f4" stroke-width="2" fill="rgba(16,150,244,.08)"/><line x1="17" y1="17" x2="24" y2="24" stroke="#1096f4" stroke-width="2.5" stroke-linecap="round"/><text x="12" y="15" text-anchor="middle" font-size="7" font-weight="700" fill="#1096f4" font-family="system-ui,sans-serif">PL</text></svg>
-            </label>
-            <label class="pill pill-icon pill-icon-mag" title="Korekta tekstu angielskiego" data-i18n-title="translation.proofread_en">
-              <input type="radio" name="proofread_lang" value="en">
-              <svg viewBox="0 0 28 28" fill="none"><circle cx="12" cy="12" r="7" stroke="#2946b7" stroke-width="2" fill="rgba(41,70,183,.08)"/><line x1="17" y1="17" x2="24" y2="24" stroke="#2946b7" stroke-width="2.5" stroke-linecap="round"/><text x="12" y="15" text-anchor="middle" font-size="7" font-weight="700" fill="#2946b7" font-family="system-ui,sans-serif">EN</text></svg>
-            </label>
+      <!-- Translation-only toolbar items -->
+      <div id="tl_toolbar_translation">
+        <!-- Sekcja: Modele / silniki -->
+        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+          <div class="toolbar-group" id="translation_mode_box">
+            <label class="toolbar-group-label" data-i18n="translation.label.mode"><img src="/static/icons/audio/speed.svg" alt="" draggable="false"> Tryb pracy</label>
+            <div class="toolbar-group-controls">
+              <label class="pill pill-icon" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
+                <input type="radio" name="translation_mode" value="fast"><img src="/static/icons/ai_ml/analysis_quick.svg" alt="Quick" draggable="false">
+              </label>
+              <label class="pill pill-icon" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
+                <input type="radio" name="translation_mode" value="accurate" checked><img src="/static/icons/ai_ml/analysis_deep.svg" alt="Deep" draggable="false">
+              </label>
+            </div>
+          </div>
+          <div class="toolbar-group" id="translation_models">
+            <label class="toolbar-group-label" for="tr_model_select" data-i18n="translation.label.model"><img src="/static/icons/ai_ml/ai_model.svg" alt="" draggable="false"> Model</label>
+            <select class="input mini-select" id="tr_model_select">
+              <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
+            </select>
+          </div>
+          <div class="toolbar-group" id="tts-engine-box" style="display:none;">
+            <label class="toolbar-group-label" for="tts-engine-select" data-i18n="translation.tts.engine"><img src="/static/icons/audio/volume_up.svg" alt="" draggable="false"> Lektor</label>
+            <div class="toolbar-group-controls">
+              <select class="input mini-select" id="tts-engine-select" style="min-width:100px;"></select>
+              <span class="small" id="tts-engine-warn" style="color:#d97706;display:none;"></span>
+            </div>
           </div>
         </div>
 
-        <!-- Proofreading model (visible only in proofreading mode) -->
-        <div class="toolbar-group" id="proofread_model_group" style="display:none;">
-          <label class="toolbar-group-label">Model korekty</label>
-          <select class="input mini-select" id="proofread_model_select" style="min-width:140px;">
-            <option value="">Ładowanie…</option>
-          </select>
-        </div>
+        <div class="toolbar-sep"></div>
 
+        <!-- Sekcja: Raport -->
+        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+          <div class="toolbar-group" id="translation_report_formats">
+            <label class="toolbar-group-label" data-i18n="translation.label.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
+            <div class="toolbar-group-controls">
+              <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
+              <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
+              <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
+              <label class="pill pill-icon" id="save_to_original_pill" style="display:none;" title="Zapisz do oryginału" data-i18n-title="translation.save_to_original"><input type="checkbox" name="tr_report_fmt" value="pptx" id="save_to_original_cb"><img id="save_to_original_icon" src="/static/icons/dokumenty/doc_pptx.svg" alt="PPTX" draggable="false"></label>
+              <button class="btn pill-icon" id="tr_export_btn" title="Eksportuj raport" data-i18n-title="translation.btn.export" onclick="exportSelectedReports()"><img src="/static/icons/pliki/file_save.svg" alt="Eksport" draggable="false"></button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Styl korekty — oddzielna sekcja (auto-shown in proofreading mode) -->
-      <div class="toolbar-sep" id="proofread_style_sep" style="display:none;"></div>
-      <div class="toolbar-section" id="proofread_style_toolbar" style="display:none;">
+      <!-- Proofread-only toolbar items -->
+      <div id="tl_toolbar_proofread" style="display:none;">
+        <div class="toolbar-section" style="display:inline-flex;gap:8px;align-items:center;">
+          <div class="toolbar-group" id="proofreading_group">
+            <label class="toolbar-group-label">Korekta</label>
+            <div class="toolbar-group-controls">
+              <label class="pill pill-icon pill-icon-mag" title="Korekta tekstu polskiego" data-i18n-title="translation.proofread_pl">
+                <input type="radio" name="proofread_lang" value="pl">
+                <svg viewBox="0 0 28 28" fill="none"><circle cx="12" cy="12" r="7" stroke="#1096f4" stroke-width="2" fill="rgba(16,150,244,.08)"/><line x1="17" y1="17" x2="24" y2="24" stroke="#1096f4" stroke-width="2.5" stroke-linecap="round"/><text x="12" y="15" text-anchor="middle" font-size="7" font-weight="700" fill="#1096f4" font-family="system-ui,sans-serif">PL</text></svg>
+              </label>
+              <label class="pill pill-icon pill-icon-mag" title="Korekta tekstu angielskiego" data-i18n-title="translation.proofread_en">
+                <input type="radio" name="proofread_lang" value="en">
+                <svg viewBox="0 0 28 28" fill="none"><circle cx="12" cy="12" r="7" stroke="#2946b7" stroke-width="2" fill="rgba(41,70,183,.08)"/><line x1="17" y1="17" x2="24" y2="24" stroke="#2946b7" stroke-width="2.5" stroke-linecap="round"/><text x="12" y="15" text-anchor="middle" font-size="7" font-weight="700" fill="#2946b7" font-family="system-ui,sans-serif">EN</text></svg>
+              </label>
+            </div>
+          </div>
+          <div class="toolbar-group" id="proofread_model_group" style="display:none;">
+            <label class="toolbar-group-label">Model korekty</label>
+            <select class="input mini-select" id="proofread_model_select" style="min-width:140px;">
+              <option value="">Ładowanie…</option>
+            </select>
+          </div>
+        </div>
+        <div class="toolbar-sep" id="proofread_style_sep"></div>
+        <div class="toolbar-section" id="proofread_style_toolbar">
         <div class="toolbar-group">
           <label class="toolbar-group-label" id="pr_style_label">Styl korekty</label>
           <div class="toolbar-group-controls" style="gap:2px;">
@@ -614,57 +662,8 @@
           </div>
         </div>
       </div>
+      </div><!-- /tl_toolbar_proofread -->
 
-      <div class="toolbar-sep"></div>
-
-      <!-- Sekcja 3: Modele / silniki -->
-      <div class="toolbar-section">
-        <!-- Work mode -->
-        <div class="toolbar-group" id="translation_mode_box">
-          <label class="toolbar-group-label" data-i18n="translation.label.mode"><img src="/static/icons/audio/speed.svg" alt="" draggable="false"> Tryb pracy</label>
-          <div class="toolbar-group-controls">
-            <label class="pill pill-icon" data-i18n-title="translation.mode.fast_title" title="Szybki (NLLB)">
-              <input type="radio" name="translation_mode" value="fast"><img src="/static/icons/ai_ml/analysis_quick.svg" alt="Quick" draggable="false">
-            </label>
-            <label class="pill pill-icon" data-i18n-title="translation.mode.accurate_title" title="Dokładny (NLLB)">
-              <input type="radio" name="translation_mode" value="accurate" checked><img src="/static/icons/ai_ml/analysis_deep.svg" alt="Deep" draggable="false">
-            </label>
-          </div>
-        </div>
-
-        <!-- Model selection -->
-        <div class="toolbar-group" id="translation_models">
-          <label class="toolbar-group-label" for="tr_model_select" data-i18n="translation.label.model"><img src="/static/icons/ai_ml/ai_model.svg" alt="" draggable="false"> Model</label>
-          <select class="input mini-select" id="tr_model_select">
-            <option value="" selected data-i18n="translation.model.select_placeholder">Wybierz model…</option>
-          </select>
-        </div>
-
-        <!-- TTS engine selector (only installed engines) -->
-        <div class="toolbar-group" id="tts-engine-box" style="display:none;">
-          <label class="toolbar-group-label" for="tts-engine-select" data-i18n="translation.tts.engine"><img src="/static/icons/audio/volume_up.svg" alt="" draggable="false"> Lektor</label>
-          <div class="toolbar-group-controls">
-            <select class="input mini-select" id="tts-engine-select" style="min-width:100px;"></select>
-            <span class="small" id="tts-engine-warn" style="color:#d97706;display:none;"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="toolbar-sep"></div>
-
-      <!-- Sekcja 3: Raport -->
-      <div class="toolbar-section">
-        <div class="toolbar-group" id="translation_report_formats">
-          <label class="toolbar-group-label" data-i18n="translation.label.report"><img src="/static/icons/dokumenty/report.svg" alt="" draggable="false"> Raport</label>
-          <div class="toolbar-group-controls">
-            <label class="pill pill-icon" title="Dodaj raport HTML" data-i18n-title="analysis.report_add_html"><input type="checkbox" name="tr_report_fmt" value="html" checked><img src="/static/icons/dokumenty/doc_html.svg" alt="HTML" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj raport DOC" data-i18n-title="analysis.report_add_doc"><input type="checkbox" name="tr_report_fmt" value="doc"><img src="/static/icons/dokumenty/doc_docx.svg" alt="DOC" draggable="false"></label>
-            <label class="pill pill-icon" title="Dodaj raport TXT" data-i18n-title="analysis.report_add_txt"><input type="checkbox" name="tr_report_fmt" value="txt"><img src="/static/icons/dokumenty/doc_txt.svg" alt="TXT" draggable="false"></label>
-            <label class="pill pill-icon" id="save_to_original_pill" style="display:none;" title="Zapisz do oryginału" data-i18n-title="translation.save_to_original"><input type="checkbox" name="tr_report_fmt" value="pptx" id="save_to_original_cb"><img id="save_to_original_icon" src="/static/icons/dokumenty/doc_pptx.svg" alt="PPTX" draggable="false"></label>
-            <button class="btn pill-icon" id="tr_export_btn" title="Eksportuj raport" data-i18n-title="translation.btn.export" onclick="exportSelectedReports()"><img src="/static/icons/pliki/file_save.svg" alt="Eksport" draggable="false"></button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -755,6 +754,9 @@
     <!-- MAIN AREA -->
     <div class="analyst-panel-main translation-main">
 
+      <!-- ===== TAB: TRANSLATION ===== -->
+      <div id="tl_tab_translation">
+
       <!-- FILE INFO -->
       <div id="file-info" class="file-info hidden">
         <i data-icon="document" data-size="14"></i> <strong id="file-name"></strong> (<span id="file-size"></span>)
@@ -767,107 +769,6 @@
           <i data-icon="speaker" data-size="16"></i>
         </button>
       </div>
-
-      <!-- PROOFREADING PANEL (shown when PL or EN toggle is active) -->
-      <div id="proofread_box" style="display:none; margin-bottom:15px; padding:15px; background:#f9f9f9; border:1px solid #e0e0e0; border-radius:8px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-          <strong><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></strong>
-        </div>
-        <div style="margin-bottom:8px;">
-          <div class="small muted" style="margin-bottom:4px;" id="pr_notes_label">Uwagi do korekty (opcjonalnie)</div>
-          <textarea class="input" id="proofread_notes" style="min-height:50px; width:100%;" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
-        </div>
-        <div class="small muted" style="margin-bottom:4px;">Wklej tekst do korekty i naciśnij przycisk Generuj na pasku narzędzi.</div>
-        <textarea class="textarea-large" id="proofread_input" style="min-height:120px;" placeholder="Wklej tekst do korekty…"></textarea>
-        <div id="proofread_result_wrap" style="display:none; margin-top:12px;">
-          <div class="small" style="margin-bottom:4px; font-weight:600;">Wynik korekty:</div>
-          <div id="proofread_progress" style="display:none;">
-            <div class="progress-bar" style="margin-bottom:8px;">
-              <div class="progress-fill" id="proofread_prog_bar" style="width:0%;">
-                <span id="proofread_prog_pct">0%</span>
-              </div>
-            </div>
-          </div>
-          <!-- Word-like formatting toolbar -->
-          <div class="pr-fmt-bar" id="pr_fmt_bar">
-            <!-- Font size -->
-            <select class="pr-fmt-select" id="pr_fmt_size" title="Rozmiar czcionki" onchange="_prFmt('fontSize',this.value)">
-              <option value="1">9</option>
-              <option value="2">10</option>
-              <option value="3" selected>12</option>
-              <option value="4">14</option>
-              <option value="5">18</option>
-              <option value="6">24</option>
-            </select>
-            <span class="pr-sep"></span>
-            <!-- Bold -->
-            <button class="pr-fmt-btn" title="Pogrubienie (Ctrl+B)" onclick="_prFmt('bold')">
-              <svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6V4z"/><path d="M6 12h9a4 4 0 0 1 0 8H6V12z"/></svg>
-            </button>
-            <!-- Italic -->
-            <button class="pr-fmt-btn" title="Kursywa (Ctrl+I)" onclick="_prFmt('italic')">
-              <svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
-            </button>
-            <!-- Underline -->
-            <button class="pr-fmt-btn" title="Podkreślenie (Ctrl+U)" onclick="_prFmt('underline')">
-              <svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
-            </button>
-            <!-- Strikethrough -->
-            <button class="pr-fmt-btn" title="Przekreślenie" onclick="_prFmt('strikeThrough')">
-              <svg viewBox="0 0 24 24"><path d="M16 4c-1.5-1-3.2-1.5-5-1.5C8 2.5 5.5 4.5 5.5 7c0 1.4.6 2.5 1.7 3.3"/><line x1="4" y1="12" x2="20" y2="12"/><path d="M17.7 13.5c.3.7.3 1.5.3 2.3 0 3-2.5 5.2-5.5 5.2-1.8 0-3.5-.6-5-1.5"/></svg>
-            </button>
-            <span class="pr-sep"></span>
-            <!-- Align left -->
-            <button class="pr-fmt-btn" title="Wyrównaj do lewej" onclick="_prFmt('justifyLeft')">
-              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="15" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="15" y2="18"/></svg>
-            </button>
-            <!-- Align center -->
-            <button class="pr-fmt-btn" title="Wyśrodkuj" onclick="_prFmt('justifyCenter')">
-              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="10" x2="18" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="6" y1="18" x2="18" y2="18"/></svg>
-            </button>
-            <!-- Align justify -->
-            <button class="pr-fmt-btn" title="Wyjustuj" onclick="_prFmt('justifyFull')">
-              <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-            <span class="pr-sep"></span>
-            <!-- Unordered list -->
-            <button class="pr-fmt-btn" title="Lista punktowana" onclick="_prFmt('insertUnorderedList')">
-              <svg viewBox="0 0 24 24"><circle cx="4" cy="6" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="6" x2="21" y2="6"/><circle cx="4" cy="12" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="12" x2="21" y2="12"/><circle cx="4" cy="18" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="18" x2="21" y2="18"/></svg>
-            </button>
-            <!-- Ordered list -->
-            <button class="pr-fmt-btn" title="Lista numerowana" onclick="_prFmt('insertOrderedList')">
-              <svg viewBox="0 0 24 24"><text x="2" y="8" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">1.</text><line x1="9" y1="6" x2="21" y2="6"/><text x="2" y="14" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">2.</text><line x1="9" y1="12" x2="21" y2="12"/><text x="2" y="20" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">3.</text><line x1="9" y1="18" x2="21" y2="18"/></svg>
-            </button>
-            <span class="pr-sep"></span>
-            <!-- Heading -->
-            <select class="pr-fmt-select" title="Nagłówek" onchange="_prFmtHeading(this.value); this.selectedIndex=0;" style="min-width:60px;">
-              <option value="" selected disabled>H</option>
-              <option value="H1">H1</option>
-              <option value="H2">H2</option>
-              <option value="H3">H3</option>
-              <option value="P">Akapit</option>
-            </select>
-            <!-- Undo -->
-            <button class="pr-fmt-btn" title="Cofnij (Ctrl+Z)" onclick="_prFmt('undo')" style="margin-left:auto;">
-              <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            </button>
-            <!-- Redo -->
-            <button class="pr-fmt-btn" title="Ponów (Ctrl+Y)" onclick="_prFmt('redo')">
-              <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
-            </button>
-          </div>
-          <div id="proofread_result" class="proofread-result"></div>
-          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn secondary" id="proofread_accept_btn" style="display:none;" title="Akceptuj poprawki — wyczyść oznaczenia zmian" data-i18n-title="translation.proofread_accept" onclick="proofreadAccept()">
-              <img src="/static/icons/akcje/check.svg" alt="" style="width:16px;height:16px;vertical-align:middle" draggable="false"> Akceptuj
-            </button>
-            <button class="btn secondary" id="proofread_copy_btn" style="display:none;" onclick="proofreadCopy()">
-              <i data-icon="copy" data-size="14"></i> Kopiuj
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- PROGRESS BAR -->
       <div id="progress-container" class="progress-container hidden">
         <div class="progress-bar">
@@ -913,6 +814,65 @@
         </div>
       </div>
 
+      </div><!-- /tl_tab_translation -->
+
+      <!-- ===== TAB: KOREKTA ===== -->
+      <div id="tl_tab_proofread" style="display:none">
+        <div id="proofread_box" style="padding:15px;background:rgba(249,249,249,.6);border:1px solid #e0e0e0;border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <strong><i data-icon="edit" data-size="16"></i> Korekta tekstu <span id="proofread_lang_badge" class="small" style="opacity:.6"></span></strong>
+          </div>
+          <div style="margin-bottom:8px;">
+            <div class="small muted" style="margin-bottom:4px;" id="pr_notes_label">Uwagi do korekty (opcjonalnie)</div>
+            <textarea class="input" id="proofread_notes" style="min-height:50px;width:100%;" placeholder="Np. Zachowaj ton formalny, nie zmieniaj nazw własnych…"></textarea>
+          </div>
+          <div class="small muted" style="margin-bottom:4px;">Wklej tekst do korekty i naciśnij przycisk Generuj na pasku narzędzi.</div>
+          <textarea class="textarea-large" id="proofread_input" style="min-height:120px;" placeholder="Wklej tekst do korekty…"></textarea>
+          <div id="proofread_result_wrap" style="display:none;margin-top:12px;">
+            <div class="small" style="margin-bottom:4px;font-weight:600;">Wynik korekty:</div>
+            <div id="proofread_progress" style="display:none;">
+              <div class="progress-bar" style="margin-bottom:8px;">
+                <div class="progress-fill" id="proofread_prog_bar" style="width:0%;"><span id="proofread_prog_pct">0%</span></div>
+              </div>
+            </div>
+            <!-- Word-like formatting toolbar -->
+            <div class="pr-fmt-bar" id="pr_fmt_bar">
+              <select class="pr-fmt-select" id="pr_fmt_size" title="Rozmiar czcionki" onchange="_prFmt('fontSize',this.value)">
+                <option value="1">9</option><option value="2">10</option><option value="3" selected>12</option>
+                <option value="4">14</option><option value="5">18</option><option value="6">24</option>
+              </select>
+              <span class="pr-sep"></span>
+              <button class="pr-fmt-btn" title="Pogrubienie (Ctrl+B)" onclick="_prFmt('bold')"><svg viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6V4z"/><path d="M6 12h9a4 4 0 0 1 0 8H6V12z"/></svg></button>
+              <button class="pr-fmt-btn" title="Kursywa (Ctrl+I)" onclick="_prFmt('italic')"><svg viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
+              <button class="pr-fmt-btn" title="Podkreślenie (Ctrl+U)" onclick="_prFmt('underline')"><svg viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg></button>
+              <button class="pr-fmt-btn" title="Przekreślenie" onclick="_prFmt('strikeThrough')"><svg viewBox="0 0 24 24"><path d="M16 4c-1.5-1-3.2-1.5-5-1.5C8 2.5 5.5 4.5 5.5 7c0 1.4.6 2.5 1.7 3.3"/><line x1="4" y1="12" x2="20" y2="12"/><path d="M17.7 13.5c.3.7.3 1.5.3 2.3 0 3-2.5 5.2-5.5 5.2-1.8 0-3.5-.6-5-1.5"/></svg></button>
+              <span class="pr-sep"></span>
+              <button class="pr-fmt-btn" title="Wyrównaj do lewej" onclick="_prFmt('justifyLeft')"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="15" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="15" y2="18"/></svg></button>
+              <button class="pr-fmt-btn" title="Wyśrodkuj" onclick="_prFmt('justifyCenter')"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="10" x2="18" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="6" y1="18" x2="18" y2="18"/></svg></button>
+              <button class="pr-fmt-btn" title="Wyjustuj" onclick="_prFmt('justifyFull')"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+              <span class="pr-sep"></span>
+              <button class="pr-fmt-btn" title="Lista punktowana" onclick="_prFmt('insertUnorderedList')"><svg viewBox="0 0 24 24"><circle cx="4" cy="6" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="6" x2="21" y2="6"/><circle cx="4" cy="12" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="12" x2="21" y2="12"/><circle cx="4" cy="18" r="1.5" fill="#3b4252" stroke="none"/><line x1="9" y1="18" x2="21" y2="18"/></svg></button>
+              <button class="pr-fmt-btn" title="Lista numerowana" onclick="_prFmt('insertOrderedList')"><svg viewBox="0 0 24 24"><text x="2" y="8" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">1.</text><line x1="9" y1="6" x2="21" y2="6"/><text x="2" y="14" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">2.</text><line x1="9" y1="12" x2="21" y2="12"/><text x="2" y="20" font-size="7" font-weight="600" fill="#3b4252" stroke="none" font-family="sans-serif">3.</text><line x1="9" y1="18" x2="21" y2="18"/></svg></button>
+              <span class="pr-sep"></span>
+              <select class="pr-fmt-select" title="Nagłówek" onchange="_prFmtHeading(this.value);this.selectedIndex=0;" style="min-width:60px;">
+                <option value="" selected disabled>H</option><option value="H1">H1</option><option value="H2">H2</option><option value="H3">H3</option><option value="P">Akapit</option>
+              </select>
+              <button class="pr-fmt-btn" title="Cofnij (Ctrl+Z)" onclick="_prFmt('undo')" style="margin-left:auto;"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+              <button class="pr-fmt-btn" title="Ponów (Ctrl+Y)" onclick="_prFmt('redo')"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg></button>
+            </div>
+            <div id="proofread_result" class="proofread-result"></div>
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn secondary" id="proofread_accept_btn" style="display:none;" title="Akceptuj poprawki" data-i18n-title="translation.proofread_accept" onclick="proofreadAccept()">
+                <img src="/static/icons/akcje/check.svg" alt="" style="width:16px;height:16px;vertical-align:middle" draggable="false"> Akceptuj
+              </button>
+              <button class="btn secondary" id="proofread_copy_btn" style="display:none;" onclick="proofreadCopy()">
+                <i data-icon="copy" data-size="14"></i> Kopiuj
+              </button>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tl_tab_proofread -->
+
     </div>
   </div>
 
@@ -933,6 +893,46 @@
     if (collapseBtn) collapseBtn.addEventListener("click", function() {
       panel.classList.add("collapsed");
       localStorage.setItem(lsKey, "collapsed");
+    });
+  })();
+
+  // Tab switching: Tłumaczenie / Korekta
+  (function() {
+    var tabs = document.querySelectorAll('#translation_toolbar .analysis-tab[data-tab]');
+    var tabTranslation = document.getElementById('tl_tab_translation');
+    var tabProofread = document.getElementById('tl_tab_proofread');
+    var toolbarTranslation = document.getElementById('tl_toolbar_translation');
+    var toolbarProofread = document.getElementById('tl_toolbar_proofread');
+    var genBtn = document.getElementById('generate-btn');
+
+    function switchTab(which) {
+      tabs.forEach(function(t) { t.classList.toggle('active', t.getAttribute('data-tab') === which); });
+      if (tabTranslation) tabTranslation.style.display = which === 'translation' ? '' : 'none';
+      if (tabProofread) tabProofread.style.display = which === 'proofread' ? '' : 'none';
+      if (toolbarTranslation) toolbarTranslation.style.display = which === 'translation' ? '' : 'none';
+      if (toolbarProofread) toolbarProofread.style.display = which === 'proofread' ? '' : 'none';
+      // Switch Generate button action
+      if (genBtn) {
+        if (which === 'proofread') {
+          genBtn.setAttribute('onclick', 'proofreadRun()');
+          genBtn.title = 'Koryguj tekst';
+        } else {
+          genBtn.setAttribute('onclick', 'startTranslation()');
+          genBtn.title = 'Tłumacz';
+        }
+      }
+      // Auto-activate proofread mode when switching to Korekta tab
+      if (which === 'proofread') {
+        var box = document.getElementById('proofread_box');
+        if (box) box.style.display = '';
+        var modelGrp = document.getElementById('proofread_model_group');
+        if (modelGrp) modelGrp.style.display = '';
+        if (typeof _proofreadLoadModels === 'function') _proofreadLoadModels();
+      }
+    }
+
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() { switchTab(tab.getAttribute('data-tab')); });
     });
   })();
 

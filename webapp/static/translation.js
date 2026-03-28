@@ -1849,63 +1849,15 @@ function _proofreadToggle(lang) {
  *  change Generate button to run proofreading.
  *  Show floating mode badge in top-right corner. */
 function _proofreadSyncUI(proofActive) {
-    // --- Toolbar: hide translation groups, show proofreading groups ---
-    ['translation_mode_box', 'translation_models'].forEach(function(id) {
-        var el = _byId(id);
-        if (el) el.style.display = proofActive ? 'none' : '';
-    });
-    ['proofread_model_group', 'proofread_style_sep', 'proofread_style_toolbar'].forEach(function(id) {
-        var el = _byId(id);
-        if (el) el.style.display = proofActive ? '' : 'none';
-    });
+    // With tab-based UI, toolbar switching is handled by tab JS.
+    // We only need to manage proofread model visibility and mode badge.
+
+    // Show/hide proofread model selector within the Korekta toolbar
+    var modelGrp = _byId('proofread_model_group');
+    if (modelGrp) modelGrp.style.display = proofActive ? '' : 'none';
 
     // Load models on first activation
     if (proofActive) _proofreadLoadModels();
-
-    // --- Sidebar: dim / disable language & option sections ---
-    var sidebar = document.querySelector('.translation-sidebar');
-    if (sidebar) {
-        sidebar.style.opacity = proofActive ? '0.35' : '';
-        sidebar.style.pointerEvents = proofActive ? 'none' : '';
-    }
-
-    // --- Main input textarea: hide in proofreading (user types in proofread_input) ---
-    var inputWrap = _byId('input-text');
-    if (inputWrap) {
-        var wrap = inputWrap.closest('div[style*="position"]') || inputWrap.parentElement;
-        if (wrap) wrap.style.display = proofActive ? 'none' : '';
-    }
-
-    // --- Translation output panels: hide in proofreading, restore when leaving ---
-    ['output-container', 'progress-container', 'summary-container'].forEach(function(id) {
-        var el = _byId(id);
-        if (!el) return;
-        if (proofActive) {
-            el.classList.add('hidden');
-        } else {
-            // Restore output-container only if there are actual results
-            if (id === 'output-container' && currentResults && Object.keys(currentResults).length > 0) {
-                el.classList.remove('hidden');
-            }
-            // summary-container: restore if it had content
-            if (id === 'summary-container') {
-                var sumEl = _byId('summary-text');
-                if (sumEl && sumEl.textContent.trim()) el.classList.remove('hidden');
-            }
-        }
-    });
-
-    // --- Generate button: switch action ---
-    var genBtn = _byId('generate-btn');
-    if (genBtn) {
-        if (proofActive) {
-            genBtn.setAttribute('onclick', 'proofreadRun()');
-            genBtn.title = tr('translation.btn.proofread_title','Koryguj tekst');
-        } else {
-            genBtn.setAttribute('onclick', 'startTranslation()');
-            genBtn.title = tr('translation.btn.translate_title','Tłumacz');
-        }
-    }
 
     // --- "Zapisz do oryginału" button: only in translation mode ---
     _trSyncSaveToOriginalBtn();

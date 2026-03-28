@@ -706,6 +706,8 @@
   "translation.options": "Opcje",
   "translation.output.placeholder": "Przetłumaczony tekst pojawi się tutaj...",
   "translation.page_title": "Transformacje",
+  "translation.tab.translation": "Tłumaczenie",
+  "translation.tab.proofread": "Korekta",
   "translation.proofread_accept": "Akceptuj poprawki — wyczyść oznaczenia zmian",
   "translation.proofread_copy": "Kopiuj poprawiony tekst",
   "translation.proofread_en": "Korekta tekstu angielskiego",
