@@ -194,13 +194,57 @@ GSM billing data analysis module.
 - Open a map without billing data (map button in the toolbar).
 - Edit mode — add points, polygons, user layers.
 
-### 6.4 Crypto Analysis
+### 6.4 Crypto Analysis *(experimental)*
 
-Cryptocurrency transaction analysis module.
+Offline cryptocurrency transaction analysis module (BTC / ETH) and exchange data.
 
-1. Load transaction data (CSV, JSON).
-2. Review analysis results.
-3. Generate narrative analysis using an LLM model.
+#### Data import
+1. Go to the **Crypto** tab in the Analysis module.
+2. Click **Load data** and select a CSV or JSON file.
+3. The system automatically detects the format:
+   - **Blockchain**: WalletExplorer.com, Etherscan
+   - **Exchanges**: Binance, Kraken, Coinbase, Revolut and more (16+ formats)
+4. After loading, data information appears: transaction count, period, token portfolio.
+
+#### Data view
+- **Exchange mode** — exchange transaction table with types (deposit, withdraw, swap, staking, etc.).
+- **Blockchain mode** — on-chain transaction table with addresses and amounts.
+- **Token portfolio** — token list with descriptions, classification (known / unknown) and values.
+- **Transaction type dictionary** — hover over a type to see its description (tooltip).
+
+#### Classification and review
+- Classify transactions: neutral / legitimate / suspicious / monitoring.
+- The system automatically classifies some transactions based on patterns.
+
+#### Anomalies
+- **ML anomaly detection** — algorithm detects unusual transactions (large amounts, unusual hours, suspicious patterns).
+- Anomaly types: peel chain, dust attack, round-trip, smurfing, structuring.
+- **OFAC** sanctioned address database and known DeFi contract lookup.
+
+#### Charts
+- **Balance timeline** — balance changes over time (with logarithmic normalization).
+- **Monthly volume** — transaction totals by month.
+- **Daily activity** — transaction distribution by day of week.
+- **Counterparty ranking** — most frequent transaction partners.
+
+#### Flow graph
+- Interactive **transaction graph** (Cytoscape.js) — flow visualization between addresses/counterparties.
+- Click a node to see details.
+
+#### User profiling (Binance)
+- 10 behavioral patterns: HODLer, Scalper, Day Trader, Swing Trader, Staker, Whale, Institutional, Alpha Hunter, Meme Trader, Bagholder.
+- 18 forensic analysis cards (internal counterparties, on-chain addresses, wash trading, P2P, fee analysis and more).
+
+#### Narrative analysis (LLM)
+- Click **Generate analysis** → an Ollama model will generate a descriptive report with conclusions and recommendations.
+
+#### Reports
+- Export results to **HTML / DOCX / TXT** from the toolbar.
+
+#### Analyst panel (Crypto)
+- Left panel with global note and transaction notes.
+- **Ctrl+M** — quickly add a note to the current transaction.
+- Tags: neutral, legitimate, suspicious, monitoring + 4 custom tags.
 
 ---
 
@@ -365,11 +409,58 @@ When creating a project, an **Encrypt project** checkbox appears with informatio
 
 ---
 
+## 12. A.R.I.A. — AI Assistant
+
+The floating A.R.I.A. button (bottom-right corner) opens the AI assistant panel.
+
+### Features
+- **AI Chat** — ask questions about the current context (transcription, analysis, data).
+- **Automatic context** — the assistant automatically includes data from the currently open page.
+- **Response reading** (TTS) — listen to the assistant's response.
+- **Hint chips** — ready-made questions tailored to the current module.
+- **Draggable** — the A.R.I.A. button can be dragged anywhere on screen (position is remembered).
+
+---
+
+## 13. Audio Player
+
+The audio player bar appears in Transcription and Diarization when the project has an audio file.
+
+- **Play / Pause** — play or stop the recording.
+- **Skip** ±5 seconds (buttons or click on the progress bar).
+- **Playback speed** — 0.5×, 0.75×, 1×, 1.25×, 1.5×, 2× (saved in browser).
+- **Click a text segment** to play the corresponding audio fragment.
+- **Waveform map** — amplitude visualization with segment markers.
+
+---
+
+## 14. Search and Segment Editing
+
+### Text search
+- In Transcription and Diarization, use **Ctrl+F** or the magnifying glass icon in the toolbar.
+- Search highlights matches and shows the count.
+- Navigate between matches with ↑ ↓ arrows.
+
+### Merging and splitting segments
+- **Merge segments** — select two adjacent blocks and click "Merge" (toolbar icon).
+- **Split segment** — place the cursor in a block and click "Split" → the block is split at the cursor position.
+
+---
+
+## 15. Dark / Light Mode
+
+- Click the theme icon in the sidebar (sun / moon icon).
+- The choice is remembered in the browser.
+
+---
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| **Esc** | Close block editor |
+| **Esc** | Close block editor / close search |
+| **Ctrl+F** | Open text search (transcription / diarization) |
 | **Ctrl+Enter** | Save note |
-| **Ctrl+M** | Add analyst note (AML / GSM) |
+| **Ctrl+M** | Add analyst note (AML / GSM / Crypto) |
 | **Right-click** | Open block editor (transcription / diarization) |
+| **Click segment** | Play audio fragment |
