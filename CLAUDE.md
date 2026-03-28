@@ -1,5 +1,11 @@
 # CLAUDE.md — AISTATEweb
 
+## Pending Tasks
+
+- **README.uk.md is MISSING** — Ukrainian README needs to be created. All other 7 language READMEs exist (en, pl, ko, es, fr, zh, de). Translate from README.md (328 lines). The language switcher line in all other READMEs already includes the UK flag link.
+- The language switcher in all 7 existing READMEs has been updated to include ZH/UK/DE flags — just README.uk.md file itself needs to be written.
+- All other translations are complete: 8 lang JSON files (895 keys each), 8 info pages, 8 manuals.
+
 ## Workflow Rules
 
 - **After every code change, always commit and push to GitHub.** Do not wait for the user to ask — push automatically after each edit or set of related edits.
