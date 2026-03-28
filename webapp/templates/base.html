@@ -68,60 +68,94 @@
       </div>
 
       {% if not multiuser %}
-      <div class="user-badge-lang" id="singleUserLang" style="display:flex;justify-content:center;gap:.3rem;margin:.5rem 0;">
-        <button class="lang-chip" data-lang="pl">PL</button>
-        <button class="lang-chip" data-lang="en">EN</button>
-        <button class="lang-chip" data-lang="ko">KO</button>
-        <button class="lang-chip" data-lang="es">ES</button>
-        <button class="lang-chip" data-lang="fr">FR</button>
-        <button class="lang-chip" data-lang="zh">ZH</button>
-        <button class="lang-chip" data-lang="uk">UK</button>
-        <button class="lang-chip" data-lang="de">DE</button>
-      </div>
-      <div class="user-badge-theme" id="singleUserTheme">
-        <button class="theme-chip" data-theme="light" title="Jasny / Light">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        </button>
-        <button class="theme-chip" data-theme="dark" title="Ciemny / Dark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
+      <div class="user-panel" id="singleUserPanel">
+        <div class="user-panel-row">
+          <span class="user-panel-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </span>
+          <select class="user-panel-select" id="singleUserLangSelect">
+            <option value="pl">Polski</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="ko">한국어</option>
+            <option value="uk">Українська</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+        <div class="user-panel-row">
+          <span class="user-panel-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </span>
+          <div class="theme-toggle" id="singleUserThemeToggle">
+            <button class="theme-toggle-btn" data-theme="light" title="Jasny / Light">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            </button>
+            <button class="theme-toggle-btn" data-theme="dark" title="Ciemny / Dark">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
       {% endif %}
 
       {% if multiuser and user %}
-      <div class="user-badge" id="userBadge">
-        <div class="user-badge-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
-        <div class="user-badge-name">{{ user.display_name or user.username }}</div>
-        <!-- Collapsed-only: logout icon -->
-        <button class="user-badge-compact-logout" id="btnLogoutCompact" type="button" title="Wyloguj / Logout">
-          <svg viewBox="0 0 48 48" width="20" height="20" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <defs><linearGradient id="mlo" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs>
-            <path d="M16 40H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4h6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
-            <path d="M24 24h18" stroke="url(#mlo)" stroke-width="2.5"/>
-            <path d="M36 18l6 6-6 6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
-          </svg>
-        </button>
-        <div class="user-badge-menu" id="userBadgeMenu" style="display:none;">
-          <div class="user-badge-lang" id="userLangSwitch">
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'pl' }}" data-lang="pl">PL</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'en' }}" data-lang="en">EN</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'ko' }}" data-lang="ko">KO</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'es' }}" data-lang="es">ES</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'fr' }}" data-lang="fr">FR</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'zh' }}" data-lang="zh">ZH</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'uk' }}" data-lang="uk">UK</button>
-            <button class="lang-chip{{ ' active' if (user.language or 'pl') == 'de' }}" data-lang="de">DE</button>
+      <div class="user-panel" id="userPanel">
+        <div class="user-panel-header" id="userBadge">
+          <div class="user-panel-avatar">{{ (user.display_name or user.username)[:2]|upper }}</div>
+          <div class="user-panel-info">
+            <div class="user-panel-name">{{ user.display_name or user.username }}</div>
+            <div class="user-panel-role">{% if user.is_superadmin %}Główny Opiekun{% elif user.role %}{{ user.role }}{% elif user.admin_roles %}{{ user.admin_roles|join(', ') }}{% else %}—{% endif %}</div>
           </div>
-          <div class="user-badge-theme" id="userThemeSwitch">
-            <button class="theme-chip{{ ' active' if (user.theme or 'light') == 'light' }}" data-theme="light" title="Jasny / Light">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            </button>
-            <button class="theme-chip{{ ' active' if (user.theme or 'light') == 'dark' }}" data-theme="dark" title="Ciemny / Dark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            </button>
+          <!-- Collapsed-only: logout icon -->
+          <button class="user-badge-compact-logout" id="btnLogoutCompact" type="button" title="Wyloguj / Logout">
+            <svg viewBox="0 0 48 48" width="20" height="20" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <defs><linearGradient id="mlo" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#f97316"/></linearGradient></defs>
+              <path d="M16 40H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4h6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
+              <path d="M24 24h18" stroke="url(#mlo)" stroke-width="2.5"/>
+              <path d="M36 18l6 6-6 6" stroke="url(#mlo)" stroke-width="2" fill="none"/>
+            </svg>
+          </button>
+        </div>
+        <div class="user-panel-body" id="userBadgeMenu">
+          <div class="user-panel-row">
+            <span class="user-panel-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </span>
+            <select class="user-panel-select" id="userLangSelect">
+              <option value="pl" {{ 'selected' if (user.language or 'pl') == 'pl' }}>Polski</option>
+              <option value="en" {{ 'selected' if (user.language or 'pl') == 'en' }}>English</option>
+              <option value="de" {{ 'selected' if (user.language or 'pl') == 'de' }}>Deutsch</option>
+              <option value="es" {{ 'selected' if (user.language or 'pl') == 'es' }}>Español</option>
+              <option value="fr" {{ 'selected' if (user.language or 'pl') == 'fr' }}>Français</option>
+              <option value="ko" {{ 'selected' if (user.language or 'pl') == 'ko' }}>한국어</option>
+              <option value="uk" {{ 'selected' if (user.language or 'pl') == 'uk' }}>Українська</option>
+              <option value="zh" {{ 'selected' if (user.language or 'pl') == 'zh' }}>中文</option>
+            </select>
           </div>
-          <button class="user-badge-btn" id="btnChangePassword" data-i18n="auth.change_password">Zmień hasło</button>
-          <button class="user-badge-btn user-badge-logout" id="btnLogout" data-i18n="auth.logout">Wyloguj</button>
+          <div class="user-panel-row">
+            <span class="user-panel-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            </span>
+            <div class="theme-toggle" id="userThemeToggle">
+              <button class="theme-toggle-btn{{ ' active' if (user.theme or 'light') == 'light' }}" data-theme="light" title="Jasny / Light">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              </button>
+              <button class="theme-toggle-btn{{ ' active' if (user.theme or 'light') == 'dark' }}" data-theme="dark" title="Ciemny / Dark">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="user-panel-divider"></div>
+          <button class="user-panel-action" id="btnChangePassword">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span data-i18n="auth.change_password">Zmień hasło</span>
+          </button>
+          <button class="user-panel-action user-panel-logout" id="btnLogout">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span data-i18n="auth.logout">Wyloguj</span>
+          </button>
         </div>
       </div>
       {% endif %}
@@ -605,65 +639,59 @@
       });
     })();
 
-    /* Single-user language switcher */
+    /* Single-user language switcher (dropdown) */
     (function(){
-      var wrap = document.getElementById('singleUserLang');
-      if (!wrap) return;
+      var sel = document.getElementById('singleUserLangSelect');
+      if (!sel) return;
       var curLang = localStorage.getItem('aistate_ui_lang') || 'pl';
-      wrap.querySelectorAll('.lang-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.lang === curLang); });
-      wrap.querySelectorAll('.lang-chip').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var lang = btn.dataset.lang;
-          localStorage.setItem('aistate_ui_lang', lang);
-          /* Also persist to backend settings so server-rendered pages use correct language */
-          fetch('/api/settings', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ui_language: lang}),
-          }).finally(function(){ location.reload(); });
-        });
+      sel.value = curLang;
+      sel.addEventListener('change', function(){
+        var lang = sel.value;
+        localStorage.setItem('aistate_ui_lang', lang);
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ui_language: lang}),
+        }).finally(function(){ location.reload(); });
       });
     })();
 
-    /* Single-user theme switcher */
+    /* Single-user theme switcher (toggle) */
     (function(){
-      var wrap = document.getElementById('singleUserTheme');
+      var wrap = document.getElementById('singleUserThemeToggle');
       if (!wrap) return;
       var curTheme = localStorage.getItem('aistate_ui_theme') || 'light';
       document.documentElement.setAttribute('data-theme', curTheme);
-      wrap.querySelectorAll('.theme-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === curTheme); });
-      wrap.querySelectorAll('.theme-chip').forEach(function(btn){
+      wrap.querySelectorAll('.theme-toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === curTheme); });
+      wrap.querySelectorAll('.theme-toggle-btn').forEach(function(btn){
         btn.addEventListener('click', function(){
           var theme = btn.dataset.theme;
           localStorage.setItem('aistate_ui_theme', theme);
           document.documentElement.setAttribute('data-theme', theme);
-          wrap.querySelectorAll('.theme-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === theme); });
+          wrap.querySelectorAll('.theme-toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === theme); });
         });
       });
     })();
 
-    // User badge toggle
+    // User panel toggle (expand/collapse body)
     (function(){
-      var badge = document.getElementById('userBadge');
-      var menu = document.getElementById('userBadgeMenu');
-      if (badge && menu) {
-        badge.addEventListener('click', function(e) {
-          if (e.target.closest('.user-badge-btn') || e.target.closest('.lang-chip') || e.target.closest('.theme-chip')) return;
-          // Don't open menu when sidebar is collapsed
+      var header = document.getElementById('userBadge');
+      var body = document.getElementById('userBadgeMenu');
+      if (header && body) {
+        header.addEventListener('click', function(e) {
+          if (e.target.closest('.user-panel-action') || e.target.closest('.user-panel-select') || e.target.closest('.theme-toggle-btn')) return;
           if (document.body.classList.contains('sidebar-collapsed')) return;
-          menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+          body.classList.toggle('collapsed');
         });
       }
-      /* Language switcher — save to account, update localStorage, reload */
-      document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
+      /* Language switcher (dropdown) — save to account, update localStorage, reload */
+      var langSel = document.getElementById('userLangSelect');
+      if (langSel) {
+        langSel.addEventListener('click', function(e){ e.stopPropagation(); });
+        langSel.addEventListener('change', function(e) {
           e.stopPropagation();
-          e.preventDefault();
-          var lang = btn.dataset.lang;
+          var lang = langSel.value;
           localStorage.setItem('aistate_ui_lang', lang);
-          /* Update chip UI immediately */
-          document.querySelectorAll('#userLangSwitch .lang-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.lang === lang); });
-          /* Save to user account (fire-and-forget), then reload */
           fetch('/api/auth/language', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
@@ -672,18 +700,16 @@
             location.reload();
           });
         });
-      });
-      /* Theme switcher — save to account, apply immediately (no reload needed) */
-      document.querySelectorAll('#userThemeSwitch .theme-chip').forEach(function(btn) {
+      }
+      /* Theme switcher (toggle) — save to account, apply immediately */
+      document.querySelectorAll('#userThemeToggle .theme-toggle-btn').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
           e.stopPropagation();
           e.preventDefault();
           var theme = btn.dataset.theme;
           localStorage.setItem('aistate_ui_theme', theme);
           document.documentElement.setAttribute('data-theme', theme);
-          /* Update chip UI immediately */
-          document.querySelectorAll('#userThemeSwitch .theme-chip').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
-          /* Save to user account (fire-and-forget) */
+          document.querySelectorAll('#userThemeToggle .theme-toggle-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
           fetch('/api/auth/theme', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
