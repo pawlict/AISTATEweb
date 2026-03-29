@@ -2124,7 +2124,7 @@ function _extractVisibleText(node) {
     while (n = walker.nextNode()) {
         result.push(n.textContent);
     }
-    return result.join('').replace(/\s+/g, ' ').trim();
+    return result.join('').replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Accept all — remove diff markup, rebuild clean <p> paragraphs */
