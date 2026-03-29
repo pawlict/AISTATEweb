@@ -143,7 +143,10 @@
 }
 .lang-picker-search:focus{ border-color:var(--accent,#4a6cf7); }
 .lang-picker-list{
-  max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:2px;
+  display:flex; flex-direction:column; gap:2px;
+}
+.lang-picker-list.lang-picker-expanded{
+  max-height:300px; overflow-y:auto;
 }
 .lang-picker-item{
   display:flex; align-items:center; gap:6px; padding:5px 8px;
@@ -157,15 +160,7 @@
 .lang-picker-name{ flex:1; }
 .lang-picker-native{ font-weight:600; }
 .lang-picker-sub{ font-size:.68rem; color:var(--muted,#888); margin-left:2px; }
-.lang-picker-divider{
-  font-size:.65rem; text-transform:uppercase; letter-spacing:.08em;
-  color:var(--muted,#888); padding:6px 8px 2px; opacity:.7;
-}
-.lang-picker-more{
-  font-size:.75rem; color:var(--accent,#4a6cf7); cursor:pointer;
-  padding:6px 8px; text-align:center; font-weight:600;
-}
-.lang-picker-more:hover{ text-decoration:underline; }
+/* nav-section inside lang-picker inherits global styles */
 
 .textarea-large {
   width: 100%;
@@ -1003,6 +998,7 @@
     function renderList(filter){
       list.innerHTML = '';
       var q = (filter || '').toLowerCase().trim();
+      list.classList.toggle('lang-picker-expanded', _expanded || !!q);
       var popular = _TL_LANGS.filter(function(l){ return l.popular; });
       var rest = _TL_LANGS.filter(function(l){ return !l.popular; });
 
@@ -1041,19 +1037,20 @@
       if(q){
         // When searching, show all matches
         rest.forEach(addItem);
-      } else if(_expanded){
-        var div = document.createElement('div');
-        div.className = 'lang-picker-divider';
-        div.textContent = '── więcej języków ──';
-        list.appendChild(div);
-        rest.forEach(addItem);
       } else {
-        // Show "more" button
-        var more = document.createElement('div');
-        more.className = 'lang-picker-more';
-        more.textContent = '▼ Pokaż wszystkie (' + rest.length + ')';
-        more.addEventListener('click', function(){ _expanded = true; renderList(''); });
-        list.appendChild(more);
+        // "Więcej języków" toggle (nav-section style, click to expand/collapse)
+        var toggle = document.createElement('div');
+        toggle.className = 'nav-section' + (_expanded ? '' : ' nav-section-collapsed');
+        toggle.textContent = 'Więcej języków';
+        toggle.style.marginTop = '4px';
+        toggle.addEventListener('click', function(){
+          _expanded = !_expanded;
+          renderList('');
+        });
+        list.appendChild(toggle);
+        if(_expanded){
+          rest.forEach(addItem);
+        }
       }
     }
 
