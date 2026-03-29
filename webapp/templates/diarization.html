@@ -2987,9 +2987,16 @@ document.getElementById('di_file_input').addEventListener('change', async functi
   btn.disabled = true;
 
   try {
+    setStatus("di", "Wysyłanie pliku… / Uploading file…");
+    setProgress("di", 0);
     var fd = new FormData();
     fd.append('audio', file);
-    var res = await api('/api/projects/' + pid + '/upload_audio', {method:'POST', body: fd});
+    var res = await apiUploadWithProgress('/api/projects/' + pid + '/upload_audio', fd, function(pct, loaded, total) {
+      setStatus("di", "Wysyłanie: " + pct + "% (" + _formatBytes(loaded) + " / " + _formatBytes(total) + ")");
+      setProgress("di", pct);
+    });
+    setStatus("di", "Plik wgrany / File uploaded");
+    setProgress("di", 100);
     AISTATE.audioFile = res.audio_file || file.name;
     document.getElementById('di_file_name').textContent = AISTATE.audioFile;
     await updateAudioState();

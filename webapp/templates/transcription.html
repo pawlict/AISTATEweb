@@ -1951,9 +1951,16 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
   btn.disabled = true;
 
   try {
+    setStatus("tr", "Wysyłanie pliku… / Uploading file…");
+    setProgress("tr", 0);
     const fd = new FormData();
     fd.append('audio', file);
-    const res = await api(`/api/projects/${pid}/upload_audio`, {method:'POST', body: fd});
+    const res = await apiUploadWithProgress(`/api/projects/${pid}/upload_audio`, fd, (pct, loaded, total) => {
+      setStatus("tr", `Wysyłanie: ${pct}% (${_formatBytes(loaded)} / ${_formatBytes(total)})`);
+      setProgress("tr", pct);
+    });
+    setStatus("tr", "Plik wgrany / File uploaded");
+    setProgress("tr", 100);
     AISTATE.audioFile = res.audio_file || file.name;
     document.getElementById('tr_file_name').textContent = AISTATE.audioFile;
     await refreshCurrentProjectInfo();
