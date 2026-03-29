@@ -332,9 +332,41 @@ textarea{min-height:220px; resize:vertical}
 /* Search variant */
 .glass-field-search{
   padding-left:32px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
-  background-position:10px center;
+  background-image:url("/static/icons/akcje/search.svg");
+  background-position:9px center;
   background-repeat:no-repeat;
+  background-size:14px 14px;
+}
+
+/* Button / preset card variant */
+.glass-field-btn{
+  cursor:pointer;
+  text-align:left;
+  position:relative;
+  transition:border-color .2s, box-shadow .2s, background .2s;
+}
+.glass-field-btn:hover{
+  border-color:transparent;
+  background:rgba(255,255,255,.55);
+  box-shadow:
+    inset 0 1.5px 3px rgba(0,0,0,.04),
+    0 0 0 1.5px rgba(59,130,246,.35),
+    0 0 0 1.5px rgba(168,85,247,.35);
+  background-image:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.55)),linear-gradient(90deg,#3b82f6,#a855f7);
+  background-origin:border-box;
+  background-clip:padding-box,border-box;
+  border:1.5px solid transparent;
+}
+[data-theme="dark"] .glass-field-btn:hover{
+  background:rgba(255,255,255,.08);
+  box-shadow:
+    inset 0 1.5px 3px rgba(0,0,0,.15),
+    0 0 0 1.5px rgba(59,130,246,.3),
+    0 0 0 1.5px rgba(168,85,247,.3);
+  background-image:linear-gradient(rgba(30,41,59,.8),rgba(30,41,59,.8)),linear-gradient(90deg,#3b82f6,#a855f7);
+  background-origin:border-box;
+  background-clip:padding-box,border-box;
+  border:1.5px solid transparent;
 }
 
 /* Custom dropdown trigger */

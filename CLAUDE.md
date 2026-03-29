@@ -249,6 +249,56 @@ MIT (main project). NLLB-200 models are CC-BY-NC 4.0 (non-commercial only). See 
 - **Translation worker**: `TRANSFORMERS_OFFLINE` is now auto-detected (checks HF cache). If NLLB model not cached, allows online download.
 - **ARIA drag**: Function must be named `_initTriggerDrag` (not `_initDrag`) to avoid collision with HUD header drag function at line ~352.
 
+## UI Design Standards
+
+All new and refactored UI elements MUST follow these standards:
+
+### Form Controls — `.glass-field` (app.css)
+- **All** inputs, selects, search fields, textareas in panels/modals use `.glass-field` class
+- Inset shadow for recessed/embossed look (NOT flat borders)
+- Semi-transparent glass background `rgba(255,255,255,.40)`
+- Hover: accent color glow ring
+- Focus: accent border + 3px outer glow
+- Dark mode: inverted shadows, dark glass background
+
+### Search Fields
+- Use icon from `webapp/static/icons/akcje/search.svg` (NOT emoji 🔍, NOT inline SVG, NOT CSS background SVG)
+- Apply as `<img>` inside the field or as CSS `background-image` referencing the SVG file
+- One search icon only (never duplicate)
+- Use `.glass-field.glass-field-search` class
+
+### Buttons / Preset Cards
+- Buttons like preset cards (Dokumenty biznesowe, Transkrypcje audio, etc.) use `.glass-field` style
+- On hover: gradient border in logo colors (`#3b82f6` → `#a855f7`) — same gradient as nav-section hover
+- Border transitions smoothly on hover
+
+### Modals
+- All modals use glassmorphism: `backdrop-filter: blur(22px)`, `rgba(255,255,255,.48)` background
+- Overlay: `backdrop-filter: blur(6px)`
+- Both `.modal-panel` and `.confirm-box` classes
+
+### Section Labels (collapsible)
+- Use `.nav-section` class for section headers (JĘZYKI, OPCJE, WIĘCEJ JĘZYKÓW, etc.)
+- Click to collapse/expand content
+- Logo gradient on hover (`#3b82f6` → `#a855f7`)
+- Text-shadow for emphasis
+- State saved to localStorage
+
+### Custom Dropdowns
+- Use `.glass-field-trigger` + `.glass-dropdown` instead of native `<select>` when rich content needed (flags, search)
+- Dropdown panel uses glassmorphism blur
+- Sticky search field at top of dropdown
+- Items with flag images from flagcdn.com (NOT emoji flags)
+
+### Flags
+- Always use `<img>` from `https://flagcdn.com/20x15/{cc}.png` (NOT emoji)
+- Country codes: pl, gb, ru, by, ua, cn, kr, de, es, fr, it, pt, jp, tr, sa, in, nl, cz, se, gr, ro, hu, bg, hr, rs, sk, dk, no, fi, th, vn, id, il, ir, ge
+
+### Analyst Panels
+- All module pages (Transcription, Diarization, Chat, Analysis, Transformation) use `.analyst-panel` collapsible sidebar
+- Section labels inside panels use `.nav-section` + click toggle
+- Panel state saved to localStorage per module
+
 ## Pro Edition
 
 - Private repo: `pawlict/AISTATEweb_Pro` (currently empty, fork of Community)
