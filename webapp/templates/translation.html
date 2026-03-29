@@ -737,8 +737,8 @@
             </label>
             <div style="position:relative;" id="source_lang_wrap">
               <div class="glass-field glass-field-trigger" id="source_lang_trigger">
-                <span class="glass-field-trigger-flag" id="source_lang_flag"></span>
-                <span class="glass-field-trigger-text" id="source_lang_text">🔍 Automatyczne wykrywanie</span>
+                <span class="glass-field-trigger-flag" id="source_lang_flag"><img src="/static/icons/akcje/search.svg" width="16" height="16" alt="" style="vertical-align:middle;opacity:.6;"></span>
+                <span class="glass-field-trigger-text" id="source_lang_text">Automatyczne wykrywanie</span>
                 <svg class="glass-field-trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
               <div class="glass-dropdown" id="source_lang_dropdown"></div>
@@ -983,7 +983,7 @@
     var textEl = document.getElementById('source_lang_text');
     if(!trigger || !dropdown || !hidden) return;
 
-    var allItems = [{id:'auto', cc:'', native:'🔍 Automatyczne wykrywanie', en:'Auto detect'}].concat(_TL_LANGS);
+    var allItems = [{id:'auto', cc:'', native:'Automatyczne wykrywanie', en:'Auto detect'}].concat(_TL_LANGS);
     var _srcExpanded = false;
 
     function buildDropdown(filter){
@@ -1024,6 +1024,8 @@
         item.className = 'glass-dropdown-item' + (hidden.value === l.id ? ' glass-dropdown-active' : '');
         if(l.cc){
           item.innerHTML = '<span class="glass-dropdown-item-flag">' + _flagImg(l.cc) + '</span>';
+        } else {
+          item.innerHTML = '<span class="glass-dropdown-item-flag"><img src="/static/icons/akcje/search.svg" width="16" height="16" alt="" style="vertical-align:middle;opacity:.6;"></span>';
         }
         var nameSpan = document.createElement('span');
         nameSpan.className = 'glass-dropdown-item-name';
@@ -1039,7 +1041,7 @@
         item.addEventListener('click', function(){
           hidden.value = l.id;
           textEl.textContent = l.id === 'auto' ? l.native : l.native + ' (' + l.en + ')';
-          flagEl.innerHTML = l.cc ? _flagImg(l.cc) : '';
+          flagEl.innerHTML = l.cc ? _flagImg(l.cc) : '<img src="/static/icons/akcje/search.svg" width="16" height="16" alt="" style="vertical-align:middle;opacity:.6;">';
           closeDropdown();
         });
         dropdown.appendChild(item);
