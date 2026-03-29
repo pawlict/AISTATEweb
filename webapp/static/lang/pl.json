@@ -708,6 +708,8 @@
   "translation.page_title": "Transformacje",
   "translation.tab.translation": "Tłumaczenie",
   "translation.tab.proofread": "Korekta",
+  "translation.toolbar.import": "Import",
+  "translation.toolbar.ai": "AI",
   "translation.proofread_accept": "Akceptuj poprawki — wyczyść oznaczenia zmian",
   "translation.proofread_copy": "Kopiuj poprawiony tekst",
   "translation.proofread_en": "Korekta tekstu angielskiego",
