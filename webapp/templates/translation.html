@@ -936,43 +936,45 @@
   })();
 
   // ===== Language data (all supported NLLB languages) =====
+  // cc = ISO 3166-1 alpha-2 country code for flagcdn.com
   var _TL_LANGS = [
-    {id:'polish',     flag:'🇵🇱', native:'Polski',      en:'Polish',     pl:'Polski',     popular:true},
-    {id:'english',    flag:'🇬🇧', native:'English',     en:'English',    pl:'Angielski',  popular:true},
-    {id:'russian',    flag:'🇷🇺', native:'Русский',     en:'Russian',    pl:'Rosyjski',   popular:true},
-    {id:'belarusian', flag:'🇧🇾', native:'Беларуская',  en:'Belarusian', pl:'Białoruski', popular:true},
-    {id:'ukrainian',  flag:'🇺🇦', native:'Українська',  en:'Ukrainian',  pl:'Ukraiński',  popular:true},
-    {id:'chinese',    flag:'🇨🇳', native:'中文',         en:'Chinese',    pl:'Chiński',    popular:true},
-    {id:'korean',     flag:'🇰🇷', native:'한국어',       en:'Korean',     pl:'Koreański',  popular:true},
-    {id:'german',     flag:'🇩🇪', native:'Deutsch',     en:'German',     pl:'Niemiecki',  popular:false},
-    {id:'spanish',    flag:'🇪🇸', native:'Español',     en:'Spanish',    pl:'Hiszpański', popular:false},
-    {id:'french',     flag:'🇫🇷', native:'Français',    en:'French',     pl:'Francuski',  popular:false},
-    {id:'italian',    flag:'🇮🇹', native:'Italiano',    en:'Italian',    pl:'Włoski',     popular:false},
-    {id:'portuguese', flag:'🇵🇹', native:'Português',   en:'Portuguese', pl:'Portugalski',popular:false},
-    {id:'japanese',   flag:'🇯🇵', native:'日本語',       en:'Japanese',   pl:'Japoński',   popular:false},
-    {id:'turkish',    flag:'🇹🇷', native:'Türkçe',      en:'Turkish',    pl:'Turecki',    popular:false},
-    {id:'arabic',     flag:'🇸🇦', native:'العربية',     en:'Arabic',     pl:'Arabski',    popular:false},
-    {id:'hindi',      flag:'🇮🇳', native:'हिन्दी',       en:'Hindi',      pl:'Hindi',      popular:false},
-    {id:'dutch',      flag:'🇳🇱', native:'Nederlands',  en:'Dutch',      pl:'Holenderski',popular:false},
-    {id:'czech',      flag:'🇨🇿', native:'Čeština',     en:'Czech',      pl:'Czeski',     popular:false},
-    {id:'swedish',    flag:'🇸🇪', native:'Svenska',     en:'Swedish',    pl:'Szwedzki',   popular:false},
-    {id:'greek',      flag:'🇬🇷', native:'Ελληνικά',    en:'Greek',      pl:'Grecki',     popular:false},
-    {id:'romanian',   flag:'🇷🇴', native:'Română',      en:'Romanian',   pl:'Rumuński',   popular:false},
-    {id:'hungarian',  flag:'🇭🇺', native:'Magyar',      en:'Hungarian',  pl:'Węgierski',  popular:false},
-    {id:'bulgarian',  flag:'🇧🇬', native:'Български',   en:'Bulgarian',  pl:'Bułgarski',  popular:false},
-    {id:'croatian',   flag:'🇭🇷', native:'Hrvatski',    en:'Croatian',   pl:'Chorwacki',  popular:false},
-    {id:'serbian',    flag:'🇷🇸', native:'Српски',      en:'Serbian',    pl:'Serbski',    popular:false},
-    {id:'slovak',     flag:'🇸🇰', native:'Slovenčina',  en:'Slovak',     pl:'Słowacki',   popular:false},
-    {id:'danish',     flag:'🇩🇰', native:'Dansk',       en:'Danish',     pl:'Duński',     popular:false},
-    {id:'norwegian',  flag:'🇳🇴', native:'Norsk',       en:'Norwegian',  pl:'Norweski',   popular:false},
-    {id:'finnish',    flag:'🇫🇮', native:'Suomi',       en:'Finnish',    pl:'Fiński',     popular:false},
-    {id:'thai',       flag:'🇹🇭', native:'ไทย',         en:'Thai',       pl:'Tajski',     popular:false},
-    {id:'vietnamese', flag:'🇻🇳', native:'Tiếng Việt',  en:'Vietnamese', pl:'Wietnamski', popular:false},
-    {id:'indonesian', flag:'🇮🇩', native:'Indonesia',   en:'Indonesian', pl:'Indonezyjski',popular:false},
-    {id:'hebrew',     flag:'🇮🇱', native:'עברית',       en:'Hebrew',     pl:'Hebrajski',  popular:false},
-    {id:'persian',    flag:'🇮🇷', native:'فارسی',       en:'Persian',    pl:'Perski',     popular:false},
-    {id:'georgian',   flag:'🇬🇪', native:'ქართული',    en:'Georgian',   pl:'Gruziński',  popular:false},
+    {id:'polish',     cc:'pl', native:'Polski',      en:'Polish',     pl:'Polski',     popular:true},
+    {id:'english',    cc:'gb', native:'English',     en:'English',    pl:'Angielski',  popular:true},
+    {id:'russian',    cc:'ru', native:'Русский',     en:'Russian',    pl:'Rosyjski',   popular:true},
+    {id:'belarusian', cc:'by', native:'Беларуская',  en:'Belarusian', pl:'Białoruski', popular:true},
+    {id:'ukrainian',  cc:'ua', native:'Українська',  en:'Ukrainian',  pl:'Ukraiński',  popular:true},
+    {id:'chinese',    cc:'cn', native:'中文',         en:'Chinese',    pl:'Chiński',    popular:true},
+    {id:'korean',     cc:'kr', native:'한국어',       en:'Korean',     pl:'Koreański',  popular:true},
+    {id:'german',     cc:'de', native:'Deutsch',     en:'German',     pl:'Niemiecki',  popular:false},
+    {id:'spanish',    cc:'es', native:'Español',     en:'Spanish',    pl:'Hiszpański', popular:false},
+    {id:'french',     cc:'fr', native:'Français',    en:'French',     pl:'Francuski',  popular:false},
+    {id:'italian',    cc:'it', native:'Italiano',    en:'Italian',    pl:'Włoski',     popular:false},
+    {id:'portuguese', cc:'pt', native:'Português',   en:'Portuguese', pl:'Portugalski',popular:false},
+    {id:'japanese',   cc:'jp', native:'日本語',       en:'Japanese',   pl:'Japoński',   popular:false},
+    {id:'turkish',    cc:'tr', native:'Türkçe',      en:'Turkish',    pl:'Turecki',    popular:false},
+    {id:'arabic',     cc:'sa', native:'العربية',     en:'Arabic',     pl:'Arabski',    popular:false},
+    {id:'hindi',      cc:'in', native:'हिन्दी',       en:'Hindi',      pl:'Hindi',      popular:false},
+    {id:'dutch',      cc:'nl', native:'Nederlands',  en:'Dutch',      pl:'Holenderski',popular:false},
+    {id:'czech',      cc:'cz', native:'Čeština',     en:'Czech',      pl:'Czeski',     popular:false},
+    {id:'swedish',    cc:'se', native:'Svenska',     en:'Swedish',    pl:'Szwedzki',   popular:false},
+    {id:'greek',      cc:'gr', native:'Ελληνικά',    en:'Greek',      pl:'Grecki',     popular:false},
+    {id:'romanian',   cc:'ro', native:'Română',      en:'Romanian',   pl:'Rumuński',   popular:false},
+    {id:'hungarian',  cc:'hu', native:'Magyar',      en:'Hungarian',  pl:'Węgierski',  popular:false},
+    {id:'bulgarian',  cc:'bg', native:'Български',   en:'Bulgarian',  pl:'Bułgarski',  popular:false},
+    {id:'croatian',   cc:'hr', native:'Hrvatski',    en:'Croatian',   pl:'Chorwacki',  popular:false},
+    {id:'serbian',    cc:'rs', native:'Српски',      en:'Serbian',    pl:'Serbski',    popular:false},
+    {id:'slovak',     cc:'sk', native:'Slovenčina',  en:'Slovak',     pl:'Słowacki',   popular:false},
+    {id:'danish',     cc:'dk', native:'Dansk',       en:'Danish',     pl:'Duński',     popular:false},
+    {id:'norwegian',  cc:'no', native:'Norsk',       en:'Norwegian',  pl:'Norweski',   popular:false},
+    {id:'finnish',    cc:'fi', native:'Suomi',       en:'Finnish',    pl:'Fiński',     popular:false},
+    {id:'thai',       cc:'th', native:'ไทย',         en:'Thai',       pl:'Tajski',     popular:false},
+    {id:'vietnamese', cc:'vn', native:'Tiếng Việt',  en:'Vietnamese', pl:'Wietnamski', popular:false},
+    {id:'indonesian', cc:'id', native:'Indonesia',   en:'Indonesian', pl:'Indonezyjski',popular:false},
+    {id:'hebrew',     cc:'il', native:'עברית',       en:'Hebrew',     pl:'Hebrajski',  popular:false},
+    {id:'persian',    cc:'ir', native:'فارسی',       en:'Persian',    pl:'Perski',     popular:false},
+    {id:'georgian',   cc:'ge', native:'ქართული',    en:'Georgian',   pl:'Gruziński',  popular:false},
   ];
+  function _flagImg(cc){ return '<img src="https://flagcdn.com/20x15/' + cc + '.png" width="20" height="15" alt="" style="vertical-align:middle;">'; }
 
   // Build source language <select>
   (function(){
@@ -984,7 +986,8 @@
     _TL_LANGS.forEach(function(l){
       var opt = document.createElement('option');
       opt.value = l.id;
-      opt.textContent = l.flag + ' ' + l.native;
+      opt.textContent = l.native + ' (' + l.en + ')';
+      opt.setAttribute('data-cc', l.cc);
       sel.appendChild(opt);
     });
   })();
@@ -1023,7 +1026,7 @@
           if(typeof updateLanguageSelection === 'function') updateLanguageSelection();
         });
         var flag = document.createElement('span');
-        flag.className = 'lang-picker-flag'; flag.textContent = l.flag;
+        flag.className = 'lang-picker-flag'; flag.innerHTML = _flagImg(l.cc);
         var name = document.createElement('span');
         name.className = 'lang-picker-name';
         name.innerHTML = '<span class="lang-picker-native">' + l.native + '</span>';
