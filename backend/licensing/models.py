@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 # All known features that can be gated
@@ -20,6 +20,19 @@ ALL_FEATURES: List[str] = [
     "batch_processing",
     "advanced_reports",
     "update_panel",
+]
+
+# Features available ONLY in the Pro version.
+# Each entry: key, Polish name, English name, Polish description, English description.
+# This list is served to the Community UI so users can see what Pro offers.
+PRO_ONLY_FEATURES: List[Dict[str, str]] = [
+    {
+        "key": "video_processing",
+        "name_pl": "Przetwarzanie wideo",
+        "name_en": "Video processing",
+        "desc_pl": "Transkrypcja i diaryzacja z plik\u00f3w wideo (MP4, AVI, MKV, MOV)",
+        "desc_en": "Transcription and diarization from video files (MP4, AVI, MKV, MOV)",
+    },
 ]
 
 # Plans and their default feature sets

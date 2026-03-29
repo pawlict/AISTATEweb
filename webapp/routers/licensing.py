@@ -1,4 +1,4 @@
-"""License management router — status, activation, removal."""
+"""License management router \u2014 status, activation, removal."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.licensing import LICENSING_ENABLED
-from backend.licensing.models import ALL_FEATURES, default_community_license
+from backend.licensing.models import ALL_FEATURES, PRO_ONLY_FEATURES, default_community_license
 from backend.licensing.validator import (
     activate_license,
     get_cached_license,
     load_license,
     remove_license,
 )
-from backend.settings import APP_NAME, APP_VERSION
+from backend.settings import APP_EDITION, APP_NAME, APP_VERSION
 
 router = APIRouter(prefix="/api/admin/license", tags=["license"])
 
@@ -52,8 +52,10 @@ async def license_status(request: Request) -> JSONResponse:
         "licensing_enabled": LICENSING_ENABLED,
         "app_name": APP_NAME,
         "app_version": APP_VERSION,
+        "app_edition": APP_EDITION,
         "license": lic.to_dict(),
         "all_features": ALL_FEATURES,
+        "pro_only_features": PRO_ONLY_FEATURES,
     })
 
 
@@ -107,7 +109,7 @@ async def remove(request: Request) -> JSONResponse:
     lic = get_cached_license()
 
     if _app_log:
-        _app_log("License removed — reverted to community")
+        _app_log("License removed \u2014 reverted to community")
 
     return JSONResponse({
         "status": "ok",

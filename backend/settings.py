@@ -5,6 +5,7 @@ from dataclasses import dataclass
 # NOTE: Name/version are intentionally sourced from this file.
 APP_NAME: str = "AISTATEweb"
 APP_VERSION: str = "3.7.2 beta"
+APP_EDITION: str = "Community"
 AUTHOR_EMAIL: str = "pawlict@proton.me"
 AUTHOR_NAME: str = "pawlict"
 

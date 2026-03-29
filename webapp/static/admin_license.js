@@ -1,4 +1,4 @@
-/* admin_license.js — License panel */
+/* admin_license.js — License panel with Community vs Pro comparison */
 (function () {
   "use strict";
 
@@ -40,12 +40,12 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.status !== "ok") return;
-        renderLicense(data.license, data.all_features, data.licensing_enabled);
+        renderLicense(data.license, data.all_features, data.licensing_enabled, data.pro_only_features || [], data.app_edition || "Community");
       })
       .catch(function () {});
   }
 
-  function renderLicense(lic, allFeatures, licensingEnabled) {
+  function renderLicense(lic, allFeatures, licensingEnabled, proOnlyFeatures, appEdition) {
     // Plan name
     var pName = (lic.plan || "community").charAt(0).toUpperCase() + (lic.plan || "community").slice(1);
     planName.textContent = pName;
@@ -96,19 +96,51 @@
 
     licIssued.textContent = lic.issued || "\u2014";
 
-    // Features list
+    // --- Features comparison table ---
     var features = lic.features || [];
+    var isCommunity = appEdition === "Community";
+    var hasProFeatures = proOnlyFeatures && proOnlyFeatures.length > 0;
+
     var html = "";
+
+    // Table header
+    html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;border-bottom:2px solid var(--border,#e0e3e8);padding-bottom:.4rem;margin-bottom:.3rem;">';
+    html += '<div style="font-size:.72rem;font-weight:700;color:var(--muted,#888);">Funkcja <span class=\'en\'>Feature</span></div>';
+    html += '<div style="font-size:.72rem;font-weight:700;color:#27ae60;text-align:center;min-width:80px;">Community</div>';
+    html += '<div style="font-size:.72rem;font-weight:700;color:#d4a017;text-align:center;min-width:80px;">Pro</div>';
+    html += '</div>';
+
+    // Community features (available in both)
     (allFeatures || []).forEach(function (f) {
       var has = features.indexOf(f) >= 0 || features.indexOf("all") >= 0;
       var icon = has ? "&#9989;" : "&#128274;";
       var name = FEATURE_NAMES[f] || f;
       var style = has ? "" : "opacity:.5;";
-      html += '<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;' + style + '">';
-      html += '<span>' + icon + '</span>';
+      html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;padding:.25rem 0;border-bottom:1px solid var(--border,#f0f0f0);font-size:.76rem;' + style + '">';
       html += '<span>' + name + '</span>';
+      html += '<span style="text-align:center;min-width:80px;">' + icon + '</span>';
+      html += '<span style="text-align:center;min-width:80px;">' + icon + '</span>';
       html += '</div>';
     });
+
+    // Pro-only features (shown only in Community edition)
+    if (isCommunity && hasProFeatures) {
+      proOnlyFeatures.forEach(function (pf) {
+        var namePl = pf.name_pl || pf.key;
+        var nameEn = pf.name_en || "";
+        var descPl = pf.desc_pl || "";
+        var descEn = pf.desc_en || "";
+        var displayName = namePl + (nameEn ? ' <span class="en">/ ' + nameEn + '</span>' : '');
+        var tooltip = descPl + (descEn ? ' / ' + descEn : '');
+
+        html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;padding:.25rem 0;border-bottom:1px solid var(--border,#f0f0f0);font-size:.76rem;" title="' + tooltip + '">';
+        html += '<span style="color:#d4a017;font-weight:500;">' + displayName + ' <span style="font-size:.65rem;background:linear-gradient(135deg,#d4a017,#f0c040);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">PRO</span></span>';
+        html += '<span style="text-align:center;min-width:80px;opacity:.4;">&#8212;</span>';
+        html += '<span style="text-align:center;min-width:80px;">&#9989;</span>';
+        html += '</div>';
+      });
+    }
+
     featuresList.innerHTML = html;
 
     // Info label when licensing not enforced
@@ -118,6 +150,15 @@
       badge.innerHTML = "Licencjonowanie nieaktywne \u2014 wszystkie funkcje odblokowane. " +
                          "<span class='en'>Licensing not enforced \u2014 all features unlocked.</span>";
       featuresList.appendChild(badge);
+    }
+
+    // Pro upgrade info (only in Community)
+    if (isCommunity && hasProFeatures) {
+      var proBadge = document.createElement("div");
+      proBadge.style.cssText = "margin-top:.5rem;padding:.5rem .7rem;background:linear-gradient(135deg,rgba(212,160,23,.06),rgba(240,192,64,.1));border:1px solid rgba(212,160,23,.25);border-radius:6px;font-size:.74rem;color:#b8860b;";
+      proBadge.innerHTML = '<b>AISTATEweb Pro</b> \u2014 Zaawansowane funkcje dost\u0119pne wy\u0142\u0105cznie w wersji Pro. ' +
+                           '<span class="en">Advanced features available exclusively in the Pro version.</span>';
+      featuresList.appendChild(proBadge);
     }
   }
 
