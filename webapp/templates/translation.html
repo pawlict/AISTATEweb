@@ -133,15 +133,7 @@
   margin-right: 10px;
 }
 
-/* Language picker with search */
-.lang-picker-search{
-  width:100%; padding:6px 8px 6px 28px;
-  border:1px solid var(--border,#d0d5dd); border-radius:6px;
-  font-size:.78rem; outline:none; box-sizing:border-box;
-  background:rgba(255,255,255,.6) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") 8px center no-repeat;
-  margin-bottom:6px;
-}
-.lang-picker-search:focus{ border-color:var(--accent,#4a6cf7); }
+/* lang-picker-search replaced by global .glass-field .glass-field-search */
 .lang-picker-list{
   display:flex; flex-direction:column; gap:2px;
 }
@@ -743,11 +735,19 @@
             <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
               <span data-i18n="translation.label.source_lang">Język źródłowy:</span>
             </label>
-            <select id="source_lang" class="input" style="width:100%;margin-bottom:10px;"></select>
-            <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
+            <div style="position:relative;" id="source_lang_wrap">
+              <div class="glass-field glass-field-trigger" id="source_lang_trigger">
+                <span class="glass-field-trigger-flag" id="source_lang_flag"></span>
+                <span class="glass-field-trigger-text" id="source_lang_text">🔍 Automatyczne wykrywanie</span>
+                <svg class="glass-field-trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div class="glass-dropdown" id="source_lang_dropdown"></div>
+              <input type="hidden" id="source_lang" value="auto">
+            </div>
+            <label style="font-size:12px;font-weight:600;margin:10px 0 5px;display:block;">
               <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
             </label>
-            <input type="text" class="lang-picker-search" id="tl_target_search" placeholder="🔍 Szukaj języka..." data-i18n-placeholder="translation.search_lang">
+            <input type="text" class="glass-field glass-field-search" id="tl_target_search" placeholder="Szukaj języka..." data-i18n-placeholder="translation.search_lang">
             <div class="lang-picker-list" id="tl_target_list"></div>
           </div>
         </div>
@@ -971,19 +971,110 @@
   ];
   function _flagImg(cc){ return '<img src="https://flagcdn.com/20x15/' + cc + '.png" width="20" height="15" alt="" style="vertical-align:middle;">'; }
 
-  // Build source language <select>
+  // Build source language custom dropdown
   (function(){
-    var sel = document.getElementById('source_lang');
-    if(!sel) return;
-    var autoOpt = document.createElement('option');
-    autoOpt.value = 'auto'; autoOpt.textContent = '🔍 Automatyczne wykrywanie';
-    sel.appendChild(autoOpt);
-    _TL_LANGS.forEach(function(l){
-      var opt = document.createElement('option');
-      opt.value = l.id;
-      opt.textContent = l.native + ' (' + l.en + ')';
-      opt.setAttribute('data-cc', l.cc);
-      sel.appendChild(opt);
+    var trigger = document.getElementById('source_lang_trigger');
+    var dropdown = document.getElementById('source_lang_dropdown');
+    var hidden = document.getElementById('source_lang');
+    var flagEl = document.getElementById('source_lang_flag');
+    var textEl = document.getElementById('source_lang_text');
+    if(!trigger || !dropdown || !hidden) return;
+
+    var allItems = [{id:'auto', cc:'', native:'🔍 Automatyczne wykrywanie', en:'Auto detect'}].concat(_TL_LANGS);
+    var _srcExpanded = false;
+
+    function buildDropdown(filter){
+      dropdown.innerHTML = '';
+      var q = (filter || '').toLowerCase().trim();
+      // Search input (sticky)
+      var searchWrap = document.createElement('div');
+      searchWrap.className = 'glass-dropdown-search';
+      var searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.className = 'glass-field glass-field-search';
+      searchInput.placeholder = 'Szukaj...';
+      searchInput.style.cssText = 'font-size:.78rem;padding:6px 8px 6px 28px;';
+      searchInput.value = filter || '';
+      searchInput.addEventListener('input', function(){ buildDropdown(searchInput.value); });
+      searchWrap.appendChild(searchInput);
+      dropdown.appendChild(searchWrap);
+
+      var popular = allItems.filter(function(l){ return l.id === 'auto' || l.popular; });
+      var rest = allItems.filter(function(l){ return l.id !== 'auto' && !l.popular; });
+
+      function matches(l){
+        if(!q) return true;
+        return (l.native||'').toLowerCase().indexOf(q) >= 0
+          || (l.en||'').toLowerCase().indexOf(q) >= 0
+          || (l.pl||'').toLowerCase().indexOf(q) >= 0
+          || l.id.toLowerCase().indexOf(q) >= 0;
+      }
+
+      function addItem(l){
+        if(!matches(l)) return;
+        var item = document.createElement('div');
+        item.className = 'glass-dropdown-item' + (hidden.value === l.id ? ' glass-dropdown-active' : '');
+        if(l.cc){
+          item.innerHTML = '<span class="glass-dropdown-item-flag">' + _flagImg(l.cc) + '</span>';
+        }
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'glass-dropdown-item-name';
+        nameSpan.textContent = l.native + (l.en && l.native !== l.en ? ' (' + l.en + ')' : '');
+        item.appendChild(nameSpan);
+        if(hidden.value === l.id){
+          var chk = document.createElement('span');
+          chk.className = 'glass-dropdown-item-check';
+          chk.textContent = '✓';
+          chk.style.opacity = '.6';
+          item.appendChild(chk);
+        }
+        item.addEventListener('click', function(){
+          hidden.value = l.id;
+          textEl.textContent = l.id === 'auto' ? l.native : l.native + ' (' + l.en + ')';
+          flagEl.innerHTML = l.cc ? _flagImg(l.cc) : '';
+          closeDropdown();
+        });
+        dropdown.appendChild(item);
+      }
+
+      popular.forEach(addItem);
+
+      if(q){
+        rest.forEach(addItem);
+      } else {
+        var toggle = document.createElement('div');
+        toggle.className = 'nav-section' + (_srcExpanded ? '' : ' nav-section-collapsed');
+        toggle.textContent = 'Więcej języków';
+        toggle.style.marginTop = '4px';
+        toggle.addEventListener('click', function(e){
+          e.stopPropagation();
+          _srcExpanded = !_srcExpanded;
+          buildDropdown(searchInput.value);
+        });
+        dropdown.appendChild(toggle);
+        if(_srcExpanded) rest.forEach(addItem);
+      }
+
+      setTimeout(function(){ searchInput.focus(); }, 50);
+    }
+
+    function openDropdown(){
+      trigger.classList.add('glass-field-open');
+      dropdown.classList.add('glass-dropdown-visible');
+      buildDropdown('');
+    }
+    function closeDropdown(){
+      trigger.classList.remove('glass-field-open');
+      dropdown.classList.remove('glass-dropdown-visible');
+    }
+
+    trigger.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(trigger.classList.contains('glass-field-open')) closeDropdown();
+      else openDropdown();
+    });
+    document.addEventListener('click', function(e){
+      if(!trigger.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
     });
   })();
 
