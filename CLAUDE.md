@@ -257,13 +257,14 @@ All new and refactored UI elements MUST follow these standards:
 
 ### Search Fields
 - Use icon from `webapp/static/icons/akcje/search.svg` (NOT emoji 🔍, NOT inline SVG, NOT CSS background SVG)
-- Apply as `<img>` inside the field or as CSS `background-image` referencing the SVG file
+- Apply as `<img class="glass-field-search-icon">` inside a `.glass-field-search-wrap` div
 - One search icon only (never duplicate)
-- Use `.glass-field.glass-field-search` class
+- Use `.glass-field.glass-field-search` class on the `<input>`
+- Structure: `<div class="glass-field-search-wrap"><img src="search.svg" class="glass-field-search-icon"><input class="glass-field glass-field-search"></div>`
 
 ### Buttons / Preset Cards
-- Buttons like preset cards (Dokumenty biznesowe, Transkrypcje audio, etc.) use `.glass-field` style
-- On hover: gradient border in logo colors (`#3b82f6` → `#a855f7`) — same gradient as nav-section hover
+- Buttons like preset cards (Dokumenty biznesowe, Transkrypcje audio, etc.) use `.glass-field.glass-field-btn`
+- On hover: **subtle** accent border glow — NOT strong gradient, just soft `rgba(59,130,246,.18)` border + `0 0 4px rgba(168,85,247,.06)` shadow
 - Border transitions smoothly on hover
 
 ### Modals

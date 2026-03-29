@@ -329,13 +329,21 @@ textarea{min-height:220px; resize:vertical}
   color:var(--muted,#888);
   font-weight:400;
 }
-/* Search variant */
+/* Search variant — icon via <img> inside wrapper */
 .glass-field-search{
   padding-left:32px;
-  background-image:url("/static/icons/akcje/search.svg");
-  background-position:9px center;
-  background-repeat:no-repeat;
-  background-size:14px 14px;
+}
+.glass-field-search-wrap{
+  position:relative;
+}
+.glass-field-search-wrap .glass-field-search-icon{
+  position:absolute;
+  left:9px;
+  top:50%;
+  transform:translateY(-50%);
+  width:14px; height:14px;
+  pointer-events:none;
+  opacity:.55;
 }
 
 /* Button / preset card variant */
@@ -346,27 +354,20 @@ textarea{min-height:220px; resize:vertical}
   transition:border-color .2s, box-shadow .2s, background .2s;
 }
 .glass-field-btn:hover{
-  border-color:transparent;
+  border-color:rgba(59,130,246,.18);
   background:rgba(255,255,255,.55);
   box-shadow:
-    inset 0 1.5px 3px rgba(0,0,0,.04),
-    0 0 0 1.5px rgba(59,130,246,.35),
-    0 0 0 1.5px rgba(168,85,247,.35);
-  background-image:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.55)),linear-gradient(90deg,#3b82f6,#a855f7);
-  background-origin:border-box;
-  background-clip:padding-box,border-box;
-  border:1.5px solid transparent;
+    inset 0 1px 2px rgba(0,0,0,.03),
+    0 0 0 1px rgba(59,130,246,.12),
+    0 0 4px rgba(168,85,247,.06);
 }
 [data-theme="dark"] .glass-field-btn:hover{
-  background:rgba(255,255,255,.08);
+  border-color:rgba(74,158,237,.18);
+  background:rgba(255,255,255,.06);
   box-shadow:
-    inset 0 1.5px 3px rgba(0,0,0,.15),
-    0 0 0 1.5px rgba(59,130,246,.3),
-    0 0 0 1.5px rgba(168,85,247,.3);
-  background-image:linear-gradient(rgba(30,41,59,.8),rgba(30,41,59,.8)),linear-gradient(90deg,#3b82f6,#a855f7);
-  background-origin:border-box;
-  background-clip:padding-box,border-box;
-  border:1.5px solid transparent;
+    inset 0 1px 2px rgba(0,0,0,.12),
+    0 0 0 1px rgba(74,158,237,.15),
+    0 0 4px rgba(168,85,247,.08);
 }
 
 /* Custom dropdown trigger */
