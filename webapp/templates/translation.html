@@ -133,6 +133,40 @@
   margin-right: 10px;
 }
 
+/* Language picker with search */
+.lang-picker-search{
+  width:100%; padding:6px 8px 6px 28px;
+  border:1px solid var(--border,#d0d5dd); border-radius:6px;
+  font-size:.78rem; outline:none; box-sizing:border-box;
+  background:rgba(255,255,255,.6) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") 8px center no-repeat;
+  margin-bottom:6px;
+}
+.lang-picker-search:focus{ border-color:var(--accent,#4a6cf7); }
+.lang-picker-list{
+  max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:2px;
+}
+.lang-picker-item{
+  display:flex; align-items:center; gap:6px; padding:5px 8px;
+  border-radius:5px; cursor:pointer; font-size:.8rem; transition:background .12s;
+}
+.lang-picker-item:hover{ background:rgba(74,108,247,.06); }
+.lang-picker-item.selected,
+.lang-picker-item.checked{ background:rgba(74,108,247,.10); }
+.lang-picker-item input[type="checkbox"]{ margin:0; }
+.lang-picker-flag{ font-size:1rem; line-height:1; flex-shrink:0; }
+.lang-picker-name{ flex:1; }
+.lang-picker-native{ font-weight:600; }
+.lang-picker-sub{ font-size:.68rem; color:var(--muted,#888); margin-left:2px; }
+.lang-picker-divider{
+  font-size:.65rem; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted,#888); padding:6px 8px 2px; opacity:.7;
+}
+.lang-picker-more{
+  font-size:.75rem; color:var(--accent,#4a6cf7); cursor:pointer;
+  padding:6px 8px; text-align:center; font-weight:600;
+}
+.lang-picker-more:hover{ text-decoration:underline; }
+
 .textarea-large {
   width: 100%;
   min-height: 300px;
@@ -714,28 +748,12 @@
             <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
               <span data-i18n="translation.label.source_lang">Język źródłowy:</span>
             </label>
-            <select id="source_lang" class="input" style="width:100%;margin-bottom:10px;">
-              <option value="auto" data-i18n="translation.lang_option.auto">🔍 Automatyczne wykrywanie</option>
-              <option value="polish" data-i18n="translation.lang_option.polish">🇵🇱 Polski</option>
-              <option value="english" data-i18n="translation.lang_option.english">🇬🇧 Angielski</option>
-              <option value="russian" data-i18n="translation.lang_option.russian">🇷🇺 Rosyjski</option>
-              <option value="belarusian" data-i18n="translation.lang_option.belarusian">🇧🇾 Białoruski</option>
-              <option value="ukrainian" data-i18n="translation.lang_option.ukrainian">🇺🇦 Ukraiński</option>
-              <option value="chinese" data-i18n="translation.lang_option.chinese">🇨🇳 Chiński</option>
-              <option value="korean" data-i18n="translation.lang_option.korean">🇰🇷 Koreański</option>
-            </select>
+            <select id="source_lang" class="input" style="width:100%;margin-bottom:10px;"></select>
             <label style="font-size:12px;font-weight:600;margin-bottom:5px;display:block;">
               <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
             </label>
-            <div class="lang-checkboxes">
-              <label class="lang-checkbox"><input type="checkbox" value="english"/> <span data-i18n="translation.lang_label.english">🇬🇧 Angielski</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="russian"/> <span data-i18n="translation.lang_label.russian">🇷🇺 Rosyjski</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="ukrainian"/> <span data-i18n="translation.lang_label.ukrainian">🇺🇦 Ukraiński</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="belarusian"/> <span data-i18n="translation.lang_label.belarusian">🇧🇾 Białoruski</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="chinese"/> <span data-i18n="translation.lang_label.chinese">🇨🇳 Chiński</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="polish"/> <span data-i18n="translation.lang_label.polish">🇵🇱 Polski</span></label>
-              <label class="lang-checkbox"><input type="checkbox" value="korean"/> <span data-i18n="translation.lang_label.korean">🇰🇷 Koreański</span></label>
-            </div>
+            <input type="text" class="lang-picker-search" id="tl_target_search" placeholder="🔍 Szukaj języka..." data-i18n-placeholder="translation.search_lang">
+            <div class="lang-picker-list" id="tl_target_list"></div>
           </div>
         </div>
         <div class="analyst-panel-divider"></div>
@@ -915,6 +933,142 @@
       panel.classList.add("collapsed");
       localStorage.setItem(lsKey, "collapsed");
     });
+  })();
+
+  // ===== Language data (all supported NLLB languages) =====
+  var _TL_LANGS = [
+    {id:'polish',     flag:'🇵🇱', native:'Polski',      en:'Polish',     pl:'Polski',     popular:true},
+    {id:'english',    flag:'🇬🇧', native:'English',     en:'English',    pl:'Angielski',  popular:true},
+    {id:'russian',    flag:'🇷🇺', native:'Русский',     en:'Russian',    pl:'Rosyjski',   popular:true},
+    {id:'belarusian', flag:'🇧🇾', native:'Беларуская',  en:'Belarusian', pl:'Białoruski', popular:true},
+    {id:'ukrainian',  flag:'🇺🇦', native:'Українська',  en:'Ukrainian',  pl:'Ukraiński',  popular:true},
+    {id:'chinese',    flag:'🇨🇳', native:'中文',         en:'Chinese',    pl:'Chiński',    popular:true},
+    {id:'korean',     flag:'🇰🇷', native:'한국어',       en:'Korean',     pl:'Koreański',  popular:true},
+    {id:'german',     flag:'🇩🇪', native:'Deutsch',     en:'German',     pl:'Niemiecki',  popular:false},
+    {id:'spanish',    flag:'🇪🇸', native:'Español',     en:'Spanish',    pl:'Hiszpański', popular:false},
+    {id:'french',     flag:'🇫🇷', native:'Français',    en:'French',     pl:'Francuski',  popular:false},
+    {id:'italian',    flag:'🇮🇹', native:'Italiano',    en:'Italian',    pl:'Włoski',     popular:false},
+    {id:'portuguese', flag:'🇵🇹', native:'Português',   en:'Portuguese', pl:'Portugalski',popular:false},
+    {id:'japanese',   flag:'🇯🇵', native:'日本語',       en:'Japanese',   pl:'Japoński',   popular:false},
+    {id:'turkish',    flag:'🇹🇷', native:'Türkçe',      en:'Turkish',    pl:'Turecki',    popular:false},
+    {id:'arabic',     flag:'🇸🇦', native:'العربية',     en:'Arabic',     pl:'Arabski',    popular:false},
+    {id:'hindi',      flag:'🇮🇳', native:'हिन्दी',       en:'Hindi',      pl:'Hindi',      popular:false},
+    {id:'dutch',      flag:'🇳🇱', native:'Nederlands',  en:'Dutch',      pl:'Holenderski',popular:false},
+    {id:'czech',      flag:'🇨🇿', native:'Čeština',     en:'Czech',      pl:'Czeski',     popular:false},
+    {id:'swedish',    flag:'🇸🇪', native:'Svenska',     en:'Swedish',    pl:'Szwedzki',   popular:false},
+    {id:'greek',      flag:'🇬🇷', native:'Ελληνικά',    en:'Greek',      pl:'Grecki',     popular:false},
+    {id:'romanian',   flag:'🇷🇴', native:'Română',      en:'Romanian',   pl:'Rumuński',   popular:false},
+    {id:'hungarian',  flag:'🇭🇺', native:'Magyar',      en:'Hungarian',  pl:'Węgierski',  popular:false},
+    {id:'bulgarian',  flag:'🇧🇬', native:'Български',   en:'Bulgarian',  pl:'Bułgarski',  popular:false},
+    {id:'croatian',   flag:'🇭🇷', native:'Hrvatski',    en:'Croatian',   pl:'Chorwacki',  popular:false},
+    {id:'serbian',    flag:'🇷🇸', native:'Српски',      en:'Serbian',    pl:'Serbski',    popular:false},
+    {id:'slovak',     flag:'🇸🇰', native:'Slovenčina',  en:'Slovak',     pl:'Słowacki',   popular:false},
+    {id:'danish',     flag:'🇩🇰', native:'Dansk',       en:'Danish',     pl:'Duński',     popular:false},
+    {id:'norwegian',  flag:'🇳🇴', native:'Norsk',       en:'Norwegian',  pl:'Norweski',   popular:false},
+    {id:'finnish',    flag:'🇫🇮', native:'Suomi',       en:'Finnish',    pl:'Fiński',     popular:false},
+    {id:'thai',       flag:'🇹🇭', native:'ไทย',         en:'Thai',       pl:'Tajski',     popular:false},
+    {id:'vietnamese', flag:'🇻🇳', native:'Tiếng Việt',  en:'Vietnamese', pl:'Wietnamski', popular:false},
+    {id:'indonesian', flag:'🇮🇩', native:'Indonesia',   en:'Indonesian', pl:'Indonezyjski',popular:false},
+    {id:'hebrew',     flag:'🇮🇱', native:'עברית',       en:'Hebrew',     pl:'Hebrajski',  popular:false},
+    {id:'persian',    flag:'🇮🇷', native:'فارسی',       en:'Persian',    pl:'Perski',     popular:false},
+    {id:'georgian',   flag:'🇬🇪', native:'ქართული',    en:'Georgian',   pl:'Gruziński',  popular:false},
+  ];
+
+  // Build source language <select>
+  (function(){
+    var sel = document.getElementById('source_lang');
+    if(!sel) return;
+    var autoOpt = document.createElement('option');
+    autoOpt.value = 'auto'; autoOpt.textContent = '🔍 Automatyczne wykrywanie';
+    sel.appendChild(autoOpt);
+    _TL_LANGS.forEach(function(l){
+      var opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = l.flag + ' ' + l.native;
+      sel.appendChild(opt);
+    });
+  })();
+
+  // Build target language checkboxes with search
+  (function(){
+    var list = document.getElementById('tl_target_list');
+    var search = document.getElementById('tl_target_search');
+    if(!list || !search) return;
+
+    var _expanded = false;
+
+    function renderList(filter){
+      list.innerHTML = '';
+      var q = (filter || '').toLowerCase().trim();
+      var popular = _TL_LANGS.filter(function(l){ return l.popular; });
+      var rest = _TL_LANGS.filter(function(l){ return !l.popular; });
+
+      function matchesFilter(l){
+        if(!q) return true;
+        return l.native.toLowerCase().indexOf(q) >= 0
+          || l.en.toLowerCase().indexOf(q) >= 0
+          || l.pl.toLowerCase().indexOf(q) >= 0
+          || l.id.toLowerCase().indexOf(q) >= 0;
+      }
+
+      function addItem(l){
+        if(!matchesFilter(l)) return false;
+        var label = document.createElement('label');
+        label.className = 'lang-picker-item';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = l.id;
+        if(_checkedLangs[l.id]) cb.checked = true;
+        cb.addEventListener('change', function(){
+          _checkedLangs[l.id] = cb.checked;
+          if(typeof updateLanguageSelection === 'function') updateLanguageSelection();
+        });
+        var flag = document.createElement('span');
+        flag.className = 'lang-picker-flag'; flag.textContent = l.flag;
+        var name = document.createElement('span');
+        name.className = 'lang-picker-name';
+        name.innerHTML = '<span class="lang-picker-native">' + l.native + '</span>';
+        if(l.native !== l.en) name.innerHTML += ' <span class="lang-picker-sub">' + l.en + '</span>';
+        label.appendChild(cb); label.appendChild(flag); label.appendChild(name);
+        list.appendChild(label);
+        return true;
+      }
+
+      popular.forEach(addItem);
+
+      if(q){
+        // When searching, show all matches
+        rest.forEach(addItem);
+      } else if(_expanded){
+        var div = document.createElement('div');
+        div.className = 'lang-picker-divider';
+        div.textContent = '── więcej języków ──';
+        list.appendChild(div);
+        rest.forEach(addItem);
+      } else {
+        // Show "more" button
+        var more = document.createElement('div');
+        more.className = 'lang-picker-more';
+        more.textContent = '▼ Pokaż wszystkie (' + rest.length + ')';
+        more.addEventListener('click', function(){ _expanded = true; renderList(''); });
+        list.appendChild(more);
+      }
+    }
+
+    // Track checked state
+    var _checkedLangs = {};
+    search.addEventListener('input', function(){ renderList(search.value); });
+
+    renderList('');
+
+    // Expose for translation.js to read checked languages
+    window._tlGetTargetLangs = function(){
+      return Object.keys(_checkedLangs).filter(function(k){ return _checkedLangs[k]; });
+    };
+    window._tlSetTargetLangs = function(langs){
+      _checkedLangs = {};
+      (langs || []).forEach(function(l){ _checkedLangs[l] = true; });
+      renderList(search.value);
+    };
   })();
 
   // Tab switching: Tłumaczenie / Korekta

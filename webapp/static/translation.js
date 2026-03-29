@@ -184,9 +184,10 @@ function _trCollectDraftState(){
     const mode = (()=>{ try{ return getSelectedMode(); }catch(e){ return 'fast'; } })();
     const nllbModel = (()=>{ try{ return getSelectedModel(); }catch(e){ return ''; } })();
 
-    const targets = Array.from(document.querySelectorAll('.lang-checkboxes input[type="checkbox"]:checked'))
-        .map(cb => String(cb.value||'').trim())
-        .filter(Boolean);
+    const targets = (typeof _tlGetTargetLangs === 'function')
+        ? _tlGetTargetLangs()
+        : Array.from(document.querySelectorAll('.lang-checkboxes input[type="checkbox"]:checked'))
+            .map(cb => String(cb.value||'').trim()).filter(Boolean);
 
     const genSum = _byId('generate_summary') ? !!_byId('generate_summary').checked : false;
     const sumDetail = _byId('summary_detail') ? parseInt(String(_byId('summary_detail').value||'5'), 10) : 5;
@@ -689,9 +690,10 @@ function setupLanguageCheckboxes() {
 }
 
 function updateLanguageSelection() {
-    const selected = Array.from(document.querySelectorAll('.lang-checkboxes input[type="checkbox"]:checked'))
-        .map(cb => String(cb.value || '').trim())
-        .filter(v => v.length > 0);
+    const selected = (typeof _tlGetTargetLangs === 'function')
+        ? _tlGetTargetLangs()
+        : Array.from(document.querySelectorAll('.lang-checkboxes input[type="checkbox"]:checked'))
+            .map(cb => String(cb.value || '').trim()).filter(v => v.length > 0);
 
     currentLanguages = selected;
 }
