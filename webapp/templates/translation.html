@@ -747,7 +747,10 @@
             <label style="font-size:12px;font-weight:600;margin:10px 0 5px;display:block;">
               <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
             </label>
-            <input type="text" class="glass-field glass-field-search" id="tl_target_search" placeholder="Szukaj języka...">
+            <div class="glass-field-search-wrap">
+              <img src="/static/icons/akcje/search.svg" class="glass-field-search-icon" alt="" draggable="false">
+              <input type="text" class="glass-field glass-field-search" id="tl_target_search" placeholder="Szukaj języka...">
+            </div>
             <div class="lang-picker-list" id="tl_target_list"></div>
           </div>
         </div>
@@ -988,7 +991,11 @@
       var q = (filter || '').toLowerCase().trim();
       // Search input (sticky)
       var searchWrap = document.createElement('div');
-      searchWrap.className = 'glass-dropdown-search';
+      searchWrap.className = 'glass-dropdown-search glass-field-search-wrap';
+      var searchIcon = document.createElement('img');
+      searchIcon.src = '/static/icons/akcje/search.svg';
+      searchIcon.className = 'glass-field-search-icon';
+      searchIcon.alt = ''; searchIcon.draggable = false;
       var searchInput = document.createElement('input');
       searchInput.type = 'text';
       searchInput.className = 'glass-field glass-field-search';
@@ -996,6 +1003,7 @@
       searchInput.style.cssText = 'font-size:.78rem;padding:6px 8px 6px 32px;';
       searchInput.value = filter || '';
       searchInput.addEventListener('input', function(){ buildDropdown(searchInput.value); });
+      searchWrap.appendChild(searchIcon);
       searchWrap.appendChild(searchInput);
       dropdown.appendChild(searchWrap);
 
