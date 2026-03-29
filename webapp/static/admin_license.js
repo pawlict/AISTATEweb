@@ -2,7 +2,6 @@
 (function () {
   "use strict";
 
-  // Feature display names (Polish + English)
   var FEATURE_NAMES = {
     transcription:     "Transkrypcja / Transcription",
     diarization:       "Diaryzacja / Diarization",
@@ -17,7 +16,6 @@
     update_panel:      "Panel aktualizacji / Update panel"
   };
 
-  // --- DOM refs ---
   var planName      = document.getElementById("lic_plan_name");
   var statusIcon    = document.getElementById("lic_status_icon");
   var statusText    = document.getElementById("lic_status_text");
@@ -32,9 +30,8 @@
   var removeBtn     = document.getElementById("lic_remove_btn");
   var actionMsg     = document.getElementById("lic_action_msg");
 
-  if (!planName) return; // panel not rendered (not superadmin)
+  if (!planName) return;
 
-  // --- Load license status ---
   function loadStatus() {
     fetch("/api/admin/license/status")
       .then(function (r) { return r.json(); })
@@ -46,22 +43,19 @@
   }
 
   function renderLicense(lic, allFeatures, licensingEnabled, proOnlyFeatures, appEdition) {
-    // Plan name
     var pName = (lic.plan || "community").charAt(0).toUpperCase() + (lic.plan || "community").slice(1);
     planName.textContent = pName;
 
-    // Status
     if (lic.is_expired) {
-      statusIcon.innerHTML = "&#10060;"; // red X
+      statusIcon.innerHTML = "&#10060;";
       statusText.textContent = "Wygas\u0142a / Expired";
       statusText.style.color = "#e74c3c";
     } else {
-      statusIcon.innerHTML = "&#9989;"; // green check
+      statusIcon.innerHTML = "&#9989;";
       statusText.textContent = "Aktywna / Active";
       statusText.style.color = "#27ae60";
     }
 
-    // Details
     licId.textContent = lic.license_id || "\u2014";
     licEmail.textContent = lic.email || "\u2014";
 
@@ -73,12 +67,8 @@
         expStr += " (" + lic.days_remaining + " dni / days)";
       }
       licExpires.textContent = expStr;
-      if (lic.days_remaining !== null && lic.days_remaining <= 30) {
-        licExpires.style.color = "#e67e22";
-      }
-      if (lic.is_expired) {
-        licExpires.style.color = "#e74c3c";
-      }
+      if (lic.days_remaining !== null && lic.days_remaining <= 30) licExpires.style.color = "#e67e22";
+      if (lic.is_expired) licExpires.style.color = "#e74c3c";
     }
 
     if (lic.updates_until === null) {
@@ -89,42 +79,46 @@
         updStr += " (" + lic.updates_days_remaining + " dni / days)";
       }
       licUpdates.textContent = updStr;
-      if (lic.updates_expired) {
-        licUpdates.style.color = "#e67e22";
-      }
+      if (lic.updates_expired) licUpdates.style.color = "#e67e22";
     }
 
     licIssued.textContent = lic.issued || "\u2014";
 
-    // --- Features comparison table ---
-    var features = lic.features || [];
+    /* --- Dynamically adjust container for comparison table --- */
     var isCommunity = appEdition === "Community";
     var hasProFeatures = proOnlyFeatures && proOnlyFeatures.length > 0;
+    var container = featuresList.parentElement;
 
+    if (isCommunity && hasProFeatures && container) {
+      container.style.flex = "1 1 420px";
+      container.style.maxWidth = "600px";
+      var heading = container.querySelector("h4");
+      if (heading) heading.innerHTML = 'Por\u00f3wnanie funkcji <span class="en">Feature comparison</span>';
+    }
+
+    /* --- Features comparison table --- */
+    var features = lic.features || [];
     var html = "";
 
-    // Table header
-    html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;border-bottom:2px solid var(--border,#e0e3e8);padding-bottom:.4rem;margin-bottom:.3rem;">';
-    html += '<div style="font-size:.72rem;font-weight:700;color:var(--muted,#888);">Funkcja <span class=\'en\'>Feature</span></div>';
-    html += '<div style="font-size:.72rem;font-weight:700;color:#27ae60;text-align:center;min-width:80px;">Community</div>';
-    html += '<div style="font-size:.72rem;font-weight:700;color:#d4a017;text-align:center;min-width:80px;">Pro</div>';
-    html += '</div>';
-
-    // Community features (available in both)
-    (allFeatures || []).forEach(function (f) {
-      var has = features.indexOf(f) >= 0 || features.indexOf("all") >= 0;
-      var icon = has ? "&#9989;" : "&#128274;";
-      var name = FEATURE_NAMES[f] || f;
-      var style = has ? "" : "opacity:.5;";
-      html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;padding:.25rem 0;border-bottom:1px solid var(--border,#f0f0f0);font-size:.76rem;' + style + '">';
-      html += '<span>' + name + '</span>';
-      html += '<span style="text-align:center;min-width:80px;">' + icon + '</span>';
-      html += '<span style="text-align:center;min-width:80px;">' + icon + '</span>';
-      html += '</div>';
-    });
-
-    // Pro-only features (shown only in Community edition)
     if (isCommunity && hasProFeatures) {
+      html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;border-bottom:2px solid var(--border,#e0e3e8);padding-bottom:.4rem;margin-bottom:.3rem;">';
+      html += '<div style="font-size:.72rem;font-weight:700;color:var(--muted,#888);">Funkcja <span class=\'en\'>Feature</span></div>';
+      html += '<div style="font-size:.72rem;font-weight:700;color:#27ae60;text-align:center;min-width:70px;">Community</div>';
+      html += '<div style="font-size:.72rem;font-weight:700;color:#d4a017;text-align:center;min-width:70px;">Pro</div>';
+      html += '</div>';
+
+      (allFeatures || []).forEach(function (f) {
+        var has = features.indexOf(f) >= 0 || features.indexOf("all") >= 0;
+        var icon = has ? "&#9989;" : "&#128274;";
+        var name = FEATURE_NAMES[f] || f;
+        var style = has ? "" : "opacity:.5;";
+        html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;padding:.25rem 0;border-bottom:1px solid var(--border,#f0f0f0);font-size:.76rem;' + style + '">';
+        html += '<span>' + name + '</span>';
+        html += '<span style="text-align:center;min-width:70px;">' + icon + '</span>';
+        html += '<span style="text-align:center;min-width:70px;">' + icon + '</span>';
+        html += '</div>';
+      });
+
       proOnlyFeatures.forEach(function (pf) {
         var namePl = pf.name_pl || pf.key;
         var nameEn = pf.name_en || "";
@@ -134,35 +128,53 @@
         var tooltip = descPl + (descEn ? ' / ' + descEn : '');
 
         html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;padding:.25rem 0;border-bottom:1px solid var(--border,#f0f0f0);font-size:.76rem;" title="' + tooltip + '">';
-        html += '<span style="color:#d4a017;font-weight:500;">' + displayName + ' <span style="font-size:.65rem;background:linear-gradient(135deg,#d4a017,#f0c040);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">PRO</span></span>';
-        html += '<span style="text-align:center;min-width:80px;opacity:.4;">&#8212;</span>';
-        html += '<span style="text-align:center;min-width:80px;">&#9989;</span>';
+        html += '<span style="color:#d4a017;font-weight:500;">' + displayName + ' <span style="font-size:.65rem;background:linear-gradient(135deg,#d4a017,#f0c040);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700;">PRO</span></span>';
+        html += '<span style="text-align:center;min-width:70px;opacity:.4;">&#8212;</span>';
+        html += '<span style="text-align:center;min-width:70px;">&#9989;</span>';
+        html += '</div>';
+      });
+    } else {
+      (allFeatures || []).forEach(function (f) {
+        var has = features.indexOf(f) >= 0 || features.indexOf("all") >= 0;
+        var icon = has ? "&#9989;" : "&#128274;";
+        var name = FEATURE_NAMES[f] || f;
+        var style = has ? "" : "opacity:.5;";
+        html += '<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;' + style + '">';
+        html += '<span>' + icon + '</span>';
+        html += '<span>' + name + '</span>';
         html += '</div>';
       });
     }
 
     featuresList.innerHTML = html;
 
-    // Info label when licensing not enforced
     if (!licensingEnabled) {
       var badge = document.createElement("div");
       badge.style.cssText = "margin-top:.6rem;padding:.4rem .6rem;background:rgba(39,174,96,.08);border:1px solid rgba(39,174,96,.2);border-radius:6px;font-size:.74rem;color:#27ae60;";
-      badge.innerHTML = "Licencjonowanie nieaktywne \u2014 wszystkie funkcje odblokowane. " +
-                         "<span class='en'>Licensing not enforced \u2014 all features unlocked.</span>";
+      badge.innerHTML = "Licencjonowanie nieaktywne \u2014 wszystkie funkcje odblokowane. <span class='en'>Licensing not enforced \u2014 all features unlocked.</span>";
       featuresList.appendChild(badge);
     }
 
-    // Pro upgrade info (only in Community)
     if (isCommunity && hasProFeatures) {
       var proBadge = document.createElement("div");
       proBadge.style.cssText = "margin-top:.5rem;padding:.5rem .7rem;background:linear-gradient(135deg,rgba(212,160,23,.06),rgba(240,192,64,.1));border:1px solid rgba(212,160,23,.25);border-radius:6px;font-size:.74rem;color:#b8860b;";
-      proBadge.innerHTML = '<b>AISTATEweb Pro</b> \u2014 Zaawansowane funkcje dost\u0119pne wy\u0142\u0105cznie w wersji Pro. ' +
-                           '<span class="en">Advanced features available exclusively in the Pro version.</span>';
+      proBadge.innerHTML = '<b>AISTATEweb Pro</b> \u2014 Zaawansowane funkcje dost\u0119pne wy\u0142\u0105cznie w wersji Pro. <span class="en">Advanced features available exclusively in the Pro version.</span>';
       featuresList.appendChild(proBadge);
+
+      /* Update info text below the features list */
+      var infoDiv = container ? container.querySelector("div.hr + div") : null;
+      if (infoDiv && infoDiv.querySelector("b")) {
+        infoDiv.innerHTML = '<b>Informacja <span class="en">Info</span></b><br>' +
+          'Licencja kontroluje dost\u0119p do funkcji aplikacji. ' +
+          'Plan <b>Community</b> zapewnia pe\u0142ny dost\u0119p do wszystkich aktualnie dost\u0119pnych funkcji. ' +
+          'Nowe modu\u0142y i zaawansowane funkcje b\u0119d\u0105 dost\u0119pne wy\u0142\u0105cznie w wersji <b style="color:#d4a017;">Pro</b>. ' +
+          '<span class="en">The license controls access to app features. ' +
+          'The Community plan provides full access to all currently available features. ' +
+          'New modules and advanced features will be available exclusively in the <b style="color:#d4a017;">Pro</b> version.</span>';
+      }
     }
   }
 
-  // --- Activate ---
   function showMsg(text, color) {
     actionMsg.textContent = text;
     actionMsg.style.color = color || "var(--text,#333)";
@@ -171,10 +183,7 @@
 
   activateBtn.addEventListener("click", function () {
     var key = keyInput.value.trim();
-    if (!key) {
-      showMsg("Wpisz klucz licencyjny / Enter a license key", "#e74c3c");
-      return;
-    }
+    if (!key) { showMsg("Wpisz klucz licencyjny / Enter a license key", "#e74c3c"); return; }
     activateBtn.disabled = true;
     fetch("/api/admin/license/activate", {
       method: "POST",
@@ -198,11 +207,8 @@
       });
   });
 
-  // --- Remove ---
   removeBtn.addEventListener("click", function () {
-    if (!confirm("Czy na pewno chcesz usun\u0105\u0107 licencj\u0119?\nAre you sure you want to remove the license?")) {
-      return;
-    }
+    if (!confirm("Czy na pewno chcesz usun\u0105\u0107 licencj\u0119?\nAre you sure you want to remove the license?")) return;
     fetch("/api/admin/license/remove", { method: "POST" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -218,6 +224,5 @@
       });
   });
 
-  // --- Init ---
   loadStatus();
 })();
