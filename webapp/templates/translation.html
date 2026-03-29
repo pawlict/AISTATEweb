@@ -126,7 +126,7 @@
 }
 
 .lang-checkbox:hover {
-  background: #f5f5f5;
+  background: rgba(74,108,247,.05);
 }
 
 .lang-checkbox input[type="checkbox"] {
@@ -144,9 +144,9 @@
   display:flex; align-items:center; gap:6px; padding:5px 8px;
   border-radius:5px; cursor:pointer; font-size:.8rem; transition:background .12s;
 }
-.lang-picker-item:hover{ background:rgba(74,108,247,.06); }
+.lang-picker-item:hover{ background:rgba(74,108,247,.05); }
 .lang-picker-item.selected,
-.lang-picker-item.checked{ background:rgba(74,108,247,.10); }
+.lang-picker-item.checked{ background:rgba(74,108,247,.08); }
 .lang-picker-item input[type="checkbox"]{ margin:0; }
 .lang-picker-flag{ font-size:1rem; line-height:1; flex-shrink:0; }
 .lang-picker-name{ flex:1; }
@@ -778,7 +778,7 @@
         <!-- PRESETS -->
         <div class="analyst-panel-section">
           <div class="nav-section analyst-panel-section-toggle" data-i18n="translation.presets">Predefiniowane</div>
-          <div class="analyst-panel-section-content">
+          <div class="analyst-panel-section-content" style="display:flex;flex-direction:column;gap:6px;">
             <button class="glass-field glass-field-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
             <button class="glass-field glass-field-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
             <button class="glass-field glass-field-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
