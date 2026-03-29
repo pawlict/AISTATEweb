@@ -704,6 +704,8 @@
   "translation.page_title": "Transformaciones",
   "translation.tab.translation": "Traducción",
   "translation.tab.proofread": "Corrección",
+  "translation.toolbar.import": "Importar",
+  "translation.toolbar.ai": "IA",
   "translation.proofread_accept": "Aceptar correcciones — eliminar marcas de cambio",
   "translation.proofread_copy": "Copiar texto corregido",
   "translation.proofread_en": "Revisar texto en inglés",

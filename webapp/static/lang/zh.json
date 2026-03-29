@@ -704,6 +704,8 @@
   "translation.page_title": "转换",
   "translation.tab.translation": "翻译",
   "translation.tab.proofread": "校对",
+  "translation.toolbar.import": "导入",
+  "translation.toolbar.ai": "AI",
   "translation.proofread_accept": "接受更正 — 清除修改标记",
   "translation.proofread_copy": "复制已更正的文本",
   "translation.proofread_en": "校对英文文本",
