@@ -747,7 +747,7 @@
             <label style="font-size:12px;font-weight:600;margin:10px 0 5px;display:block;">
               <span data-i18n="translation.label.target_langs">Przetłumacz na:</span>
             </label>
-            <input type="text" class="glass-field glass-field-search" id="tl_target_search" placeholder="Szukaj języka..." data-i18n-placeholder="translation.search_lang">
+            <input type="text" class="glass-field glass-field-search" id="tl_target_search" placeholder="Szukaj języka...">
             <div class="lang-picker-list" id="tl_target_list"></div>
           </div>
         </div>
@@ -776,9 +776,9 @@
         <div class="analyst-panel-section">
           <div class="nav-section analyst-panel-section-toggle" data-i18n="translation.presets">Predefiniowane</div>
           <div class="analyst-panel-section-content">
-            <button class="preset-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
-            <button class="preset-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
-            <button class="preset-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
+            <button class="glass-field glass-field-btn" onclick="applyPreset('business')" data-i18n="translation.preset.business"><i data-icon="document" data-size="14"></i> Dokumenty biznesowe</button>
+            <button class="glass-field glass-field-btn" onclick="applyPreset('transcripts')" data-i18n="translation.preset.transcripts"><i data-icon="transcription" data-size="14"></i> Transkrypcje audio</button>
+            <button class="glass-field glass-field-btn" onclick="applyPreset('scientific')" data-i18n="translation.preset.scientific"><i data-icon="deep_search" data-size="14"></i> Artykuły naukowe</button>
           </div>
         </div>
 
@@ -993,7 +993,7 @@
       searchInput.type = 'text';
       searchInput.className = 'glass-field glass-field-search';
       searchInput.placeholder = 'Szukaj...';
-      searchInput.style.cssText = 'font-size:.78rem;padding:6px 8px 6px 28px;';
+      searchInput.style.cssText = 'font-size:.78rem;padding:6px 8px 6px 32px;';
       searchInput.value = filter || '';
       searchInput.addEventListener('input', function(){ buildDropdown(searchInput.value); });
       searchWrap.appendChild(searchInput);

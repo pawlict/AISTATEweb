@@ -312,7 +312,7 @@ function _trRenderResultsFromState(state){
             const tab = document.createElement('button');
             tab.className = 'tab' + (index === 0 ? ' active' : '');
             tab.dataset.lang = lang;
-            tab.textContent = getLangFlag(lang) + ' ' + getLangName(lang);
+            tab.innerHTML = getLangFlag(lang) + ' ' + getLangName(lang);
             tab.onclick = () => { switchLanguageTab(lang); };
             tabsContainer.appendChild(tab);
         });
@@ -1009,7 +1009,7 @@ function displayResults(data) {
 
         // Flag + name
         const labelSpan = document.createElement('span');
-        labelSpan.textContent = getLangFlag(lang) + ' ' + getLangName(lang);
+        labelSpan.innerHTML = getLangFlag(lang) + ' ' + getLangName(lang);
         tab.appendChild(labelSpan);
 
         // TTS speak button inside tab
@@ -1078,23 +1078,25 @@ function switchLanguageTab(lang) {
 
 // Language utilities
 function getLangFlag(lang) {
-    const flags = {
-        'polish': '🇵🇱', 'english': '🇬🇧', 'russian': '🇷🇺',
-        'belarusian': '🇧🇾', 'ukrainian': '🇺🇦', 'chinese': '🇨🇳',
-        'korean': '🇰🇷', 'japanese': '🇯🇵', 'german': '🇩🇪',
-        'french': '🇫🇷', 'spanish': '🇪🇸', 'italian': '🇮🇹',
-        'portuguese': '🇵🇹', 'dutch': '🇳🇱', 'czech': '🇨🇿',
-        'swedish': '🇸🇪', 'turkish': '🇹🇷', 'arabic': '🇸🇦',
-        'hindi': '🇮🇳', 'thai': '🇹🇭', 'vietnamese': '🇻🇳',
-        'indonesian': '🇮🇩', 'hungarian': '🇭🇺', 'romanian': '🇷🇴',
-        'bulgarian': '🇧🇬', 'croatian': '🇭🇷', 'serbian': '🇷🇸',
-        'slovenian': '🇸🇮', 'greek': '🇬🇷', 'danish': '🇩🇰',
-        'norwegian': '🇳🇴', 'finnish': '🇫🇮', 'slovak': '🇸🇰',
-        'latvian': '🇱🇻', 'lithuanian': '🇱🇹', 'estonian': '🇪🇪',
-        'georgian': '🇬🇪', 'hebrew': '🇮🇱', 'persian': '🇮🇷',
-        'malay': '🇲🇾',
+    const cc = {
+        'polish':'pl', 'english':'gb', 'russian':'ru',
+        'belarusian':'by', 'ukrainian':'ua', 'chinese':'cn',
+        'korean':'kr', 'japanese':'jp', 'german':'de',
+        'french':'fr', 'spanish':'es', 'italian':'it',
+        'portuguese':'pt', 'dutch':'nl', 'czech':'cz',
+        'swedish':'se', 'turkish':'tr', 'arabic':'sa',
+        'hindi':'in', 'thai':'th', 'vietnamese':'vn',
+        'indonesian':'id', 'hungarian':'hu', 'romanian':'ro',
+        'bulgarian':'bg', 'croatian':'hr', 'serbian':'rs',
+        'slovenian':'si', 'greek':'gr', 'danish':'dk',
+        'norwegian':'no', 'finnish':'fi', 'slovak':'sk',
+        'latvian':'lv', 'lithuanian':'lt', 'estonian':'ee',
+        'georgian':'ge', 'hebrew':'il', 'persian':'ir',
+        'malay':'my',
     };
-    return flags[lang] || '';
+    var code = cc[lang];
+    if (!code) return '';
+    return '<img src="https://flagcdn.com/20x15/' + code + '.png" width="20" height="15" alt="" style="vertical-align:middle;">';
 }
 
 function getLangName(lang) {
