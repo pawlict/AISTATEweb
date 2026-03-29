@@ -875,10 +875,50 @@ function setLogs(prefix, text){
 }
 
 // ---------- Task management ----------
+/* Upload file via XMLHttpRequest with progress tracking */
+function apiUploadWithProgress(url, formData, onProgress){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.addEventListener("progress", (e) => {
+      if(e.lengthComputable && onProgress){
+        onProgress(Math.round((e.loaded / e.total) * 100), e.loaded, e.total);
+      }
+    });
+    xhr.addEventListener("load", () => {
+      try{
+        const j = JSON.parse(xhr.responseText);
+        if(xhr.status >= 200 && xhr.status < 300) resolve(j);
+        else reject(new Error(j.detail || j.error || j.message || ("HTTP " + xhr.status)));
+      }catch(e){
+        if(xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+        else reject(new Error("HTTP " + xhr.status));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("B\u0142\u0105d po\u0142\u0105czenia / Connection error")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload anulowany / Upload cancelled")));
+    xhr.send(formData);
+  });
+}
+
+function _formatBytes(bytes){
+  if(bytes < 1024) return bytes + " B";
+  if(bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  if(bytes < 1073741824) return (bytes / 1048576).toFixed(1) + " MB";
+  return (bytes / 1073741824).toFixed(2) + " GB";
+}
+
+function _formHasFile(formData){
+  for(const [key, val] of formData.entries()){
+    if(val instanceof File && val.size > 0) return true;
+  }
+  return false;
+}
+
 async function startTask(prefix, endpoint, formData, onDone){
   _dbgLog("startTask", `called: prefix="${prefix}", endpoint="${endpoint}"`);
   try{
-    setStatus(prefix, "Starting…");
+    setStatus(prefix, "Starting\u2026");
     setProgress(prefix, 0);
     setLogs(prefix, "");
 
@@ -889,13 +929,26 @@ async function startTask(prefix, endpoint, formData, onDone){
     _dbgLog("startTask", `got project_id="${project_id}", setting in formData`);
     formData.set("project_id", project_id);
 
-    _dbgLog("startTask", `POSTing to ${endpoint}...`);
-    const j = await api(endpoint, {method:"POST", body: formData});
+    let j;
+    if(_formHasFile(formData)){
+      setStatus(prefix, "Wysy\u0142anie pliku\u2026 / Uploading file\u2026");
+      _dbgLog("startTask", `uploading with progress to ${endpoint}...`);
+      j = await apiUploadWithProgress(endpoint, formData, (pct, loaded, total) => {
+        setStatus(prefix, `Wysy\u0142anie: ${pct}% (${_formatBytes(loaded)} / ${_formatBytes(total)})`);
+        setProgress(prefix, Math.round(pct * 0.3));
+      });
+      setStatus(prefix, "Plik wys\u0142any. Przetwarzanie\u2026 / File uploaded. Processing\u2026");
+      setProgress(prefix, 30);
+    }else{
+      _dbgLog("startTask", `POSTing to ${endpoint} (no file)...`);
+      j = await api(endpoint, {method:"POST", body: formData});
+    }
+
     _dbgLog("startTask", `response: ${JSON.stringify(j)}`);
     const task_id = j.task_id;
     try{ AISTATE.lastTaskId = task_id; }catch(e){}
     AISTATE.setTaskId(prefix, task_id);
-    setStatus(prefix, "Running…");
+    setStatus(prefix, "Running\u2026");
     pollTask(prefix, task_id, onDone);
   }catch(e){
     const msg = (e && e.message) ? e.message : "Error";
