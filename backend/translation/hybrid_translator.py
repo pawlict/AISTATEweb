@@ -29,18 +29,38 @@ class HybridTranslator:
         'ukrainian': 'ukr_Cyrl',
         'chinese': 'zho_Hans',
         'korean': 'kor_Hang',
+        'german': 'deu_Latn',
+        'spanish': 'spa_Latn',
+        'french': 'fra_Latn',
+        'italian': 'ita_Latn',
+        'portuguese': 'por_Latn',
+        'japanese': 'jpn_Jpan',
+        'turkish': 'tur_Latn',
+        'arabic': 'arb_Arab',
+        'hindi': 'hin_Deva',
+        'dutch': 'nld_Latn',
+        'czech': 'ces_Latn',
+        'swedish': 'swe_Latn',
+        'greek': 'ell_Grek',
+        'romanian': 'ron_Latn',
+        'hungarian': 'hun_Latn',
+        'bulgarian': 'bul_Cyrl',
+        'croatian': 'hrv_Latn',
+        'serbian': 'srp_Cyrl',
+        'slovak': 'slk_Latn',
+        'danish': 'dan_Latn',
+        'norwegian': 'nob_Latn',
+        'finnish': 'fin_Latn',
+        'thai': 'tha_Thai',
+        'vietnamese': 'vie_Latn',
+        'indonesian': 'ind_Latn',
+        'hebrew': 'heb_Hebr',
+        'persian': 'pes_Arab',
+        'georgian': 'kat_Geor',
     }
 
     # Language names for Ollama prompts
-    LANG_NAMES = {
-        'polish': 'Polish',
-        'english': 'English',
-        'russian': 'Russian',
-        'belarusian': 'Belarusian',
-        'ukrainian': 'Ukrainian',
-        'chinese': 'Chinese',
-        'korean': 'Korean',
-    }
+    LANG_NAMES = {k: k.capitalize() for k in LANG_CODES_NLLB}
     
     def __init__(
         self,
