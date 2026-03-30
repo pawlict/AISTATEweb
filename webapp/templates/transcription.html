@@ -1531,6 +1531,18 @@ function onDoneTranscribe(j){
       dl.href = `/api/projects/${j.project_id}/download/transcript.txt`;
       dl.style.display = "inline-flex";
     }
+
+    // Re-init audio player after transcription completes
+    TR.audioUrl = trAudioUrl();
+    if (TR.audioUrl && window._trPlayer) {
+      window._trPlayer.init();
+      if (window._trPlayer.audio) TR.audio = window._trPlayer.audio;
+    }
+
+    // Re-init seg_tools (waveform map, merge/split, search)
+    if (typeof segTools !== "undefined" && segTools.init) {
+      setTimeout(function(){ segTools.init(); }, 200);
+    }
   }
   // Load sound events if sound detection was enabled
   trLoadSoundEvents();
@@ -1857,6 +1869,12 @@ document.getElementById("tr_btn").addEventListener("click", async ()=>{
     fd.append("sound_detection_model", sdModel.value);
   }
 
+  // Audio enhancement override from quality banner
+  if (window._trDenoise) {
+    fd.append("force_denoise", "1");
+    window._trDenoise = false;
+  }
+
   await startTask("tr", "/api/transcribe", fd, onDoneTranscribe);
 });
 
@@ -1959,11 +1977,22 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
       setStatus("tr", `Wysyłanie: ${pct}% (${_formatBytes(loaded)} / ${_formatBytes(total)})`);
       setProgress("tr", pct);
     });
-    setStatus("tr", "Plik wgrany / File uploaded");
+    setStatus("tr", "Plik wgrany. Analiza jako\u015bci\u2026 / File uploaded. Analyzing quality\u2026");
     setProgress("tr", 100);
     AISTATE.audioFile = res.audio_file || file.name;
     document.getElementById('tr_file_name').textContent = AISTATE.audioFile;
     await refreshCurrentProjectInfo();
+
+    // Audio quality analysis (Pro)
+    try {
+      const afd = new FormData();
+      afd.append('project_id', pid);
+      const qa = await api('/api/audio/analyze', {method:'POST', body: afd});
+      _showAudioQualityBanner('tr', qa);
+    } catch(qe) { /* analysis optional */ }
+
+    setStatus("tr", "\u2014");
+    setProgress("tr", 0);
 
     // Re-init audio player with the new file
     TR.audioUrl = trAudioUrl();
@@ -1985,6 +2014,56 @@ document.getElementById('tr_file_input').addEventListener('change', async (e) =>
     e.target.value = '';
   }
 });
+
+// --- Audio quality banner (Pro) ---
+function _showAudioQualityBanner(prefix, qa) {
+  var existing = document.getElementById(prefix + '_audio_quality_banner');
+  if (existing) existing.remove();
+
+  if (!qa || qa.quality === 'good' || qa.quality === 'unknown') return;
+
+  var color = qa.quality === 'poor' ? '#e74c3c' : '#e67e22';
+  var bgColor = qa.quality === 'poor' ? 'rgba(231,76,60,.07)' : 'rgba(230,126,34,.07)';
+  var borderColor = qa.quality === 'poor' ? 'rgba(231,76,60,.25)' : 'rgba(230,126,34,.25)';
+  var icon = qa.quality === 'poor' ? '\u26a0\ufe0f' : '\u2139\ufe0f';
+
+  var recs = (qa.recommendations || []).map(function(r){ return '<li>' + r + '</li>'; }).join('');
+
+  var html = '<div id="' + prefix + '_audio_quality_banner" style="margin:8px 16px;padding:10px 14px;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:8px;font-size:.82rem;">';
+  html += '<div style="font-weight:700;color:' + color + ';">' + icon + ' Jako\u015b\u0107 d\u017awi\u0119ku: ' + (qa.quality === 'poor' ? 'Niska' : '\u015arednia');
+  html += ' <span class="en">/ Audio quality: ' + (qa.quality === 'poor' ? 'Poor' : 'Fair') + '</span></div>';
+  if (qa.loudness_dbfs) html += '<div style="font-size:.75rem;color:var(--muted,#888);margin-top:2px;">G\u0142o\u015bno\u015b\u0107: ' + qa.loudness_dbfs.toFixed(1) + ' dBFS | SNR: ~' + qa.snr_estimate.toFixed(0) + ' dB</div>';
+  if (recs) html += '<ul style="margin:6px 0 4px 16px;padding:0;font-size:.78rem;color:' + color + ';">' + recs + '</ul>';
+  if (qa.needs_enhancement) {
+    html += '<div style="margin-top:6px;">';
+    html += '<button class="btn" style="font-size:.78rem;background:' + color + ';color:#fff;border:none;padding:4px 12px;border-radius:4px;" onclick="window._enableDenoise(\'' + prefix + '\')">Popraw i transkrybuj <span class="en">/ Enhance & transcribe</span></button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  var progressDiv = document.getElementById(prefix + '_progress');
+  if (progressDiv && progressDiv.parentNode) {
+    progressDiv.parentNode.insertBefore(_htmlToEl(html), progressDiv);
+  }
+}
+
+function _htmlToEl(html) {
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  return div.firstChild;
+}
+
+// Enable denoise for next transcription/diarization
+window._trDenoise = false;
+window._enableDenoise = function(prefix) {
+  if (prefix === 'tr') window._trDenoise = true;
+  var banner = document.getElementById(prefix + '_audio_quality_banner');
+  if (banner) {
+    banner.style.background = 'rgba(39,174,96,.07)';
+    banner.style.borderColor = 'rgba(39,174,96,.25)';
+    banner.innerHTML = '<div style="color:#27ae60;font-weight:600;">\u2705 Redukcja szumu w\u0142\u0105czona dla nast\u0119pnej transkrypcji <span class="en">/ Noise reduction enabled</span></div>';
+  }
+};
 
 // Initialize
 (async()=>{

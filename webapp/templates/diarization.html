@@ -2235,6 +2235,18 @@ function onDoneDiarize(j){
     if(j.project_id){
       setDownloadLink(j.project_id);
     }
+
+    // Re-init audio player after diarization completes
+    DI.audioUrl = diAudioUrl();
+    if (DI.audioUrl && window._diPlayer) {
+      window._diPlayer.init();
+      if (window._diPlayer.audio) DI.audio = window._diPlayer.audio;
+    }
+
+    // Re-init seg_tools (waveform map, merge/split, search)
+    if (typeof segTools !== "undefined" && segTools.init) {
+      setTimeout(function(){ segTools.init(); }, 200);
+    }
   }
   // Load sound events if sound detection was enabled
   diLoadSoundEvents();
