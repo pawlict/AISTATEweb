@@ -23,21 +23,27 @@ ALL_FEATURES: List[str] = [
 ]
 
 # Features available ONLY in the Pro version.
-# Each entry: key, Polish name, English name, Polish description, English description.
 # This list is served to the Community UI so users can see what Pro offers.
 PRO_ONLY_FEATURES: List[Dict[str, str]] = [
     {
         "key": "video_processing",
         "name_pl": "Przetwarzanie wideo",
         "name_en": "Video processing",
-        "desc_pl": "Transkrypcja i diaryzacja z plik\u00f3w wideo (MP4, AVI, MKV, MOV)",
-        "desc_en": "Transcription and diarization from video files (MP4, AVI, MKV, MOV)",
+        "desc_pl": "Transkrypcja i diaryzacja z plik\u00f3w wideo (14 format\u00f3w: MP4, AVI, MKV, MOV, WEBM, WMV, FLV, M4V, MPG, MPEG, 3GP, TS, MTS, VOB)",
+        "desc_en": "Transcription and diarization from video files (14 formats)",
+    },
+    {
+        "key": "audio_enhancement",
+        "name_pl": "Poprawa jako\u015bci d\u017awi\u0119ku",
+        "name_en": "Audio enhancement",
+        "desc_pl": "Automatyczna normalizacja g\u0142o\u015bno\u015bci, redukcja szumu, analiza jako\u015bci audio (SNR, dBFS, clipping)",
+        "desc_en": "Auto loudness normalization, noise reduction, audio quality analysis (SNR, dBFS, clipping)",
     },
 ]
 
 # Plans and their default feature sets
 PLAN_FEATURES = {
-    "community": ALL_FEATURES.copy(),  # everything unlocked when LICENSING_ENABLED=False
+    "community": ALL_FEATURES.copy(),
     "pro": ALL_FEATURES.copy(),
     "enterprise": ALL_FEATURES.copy(),
 }
@@ -52,8 +58,8 @@ class LicenseInfo:
     email: str = ""
     plan: str = "community"
     issued: Optional[date] = None
-    expires: Optional[date] = None          # None = perpetual
-    updates_until: Optional[date] = None    # None = perpetual
+    expires: Optional[date] = None
+    updates_until: Optional[date] = None
     features: List[str] = field(default_factory=lambda: ALL_FEATURES.copy())
     raw_key: str = ""
 
@@ -115,7 +121,7 @@ def default_community_license() -> LicenseInfo:
         email="",
         plan="community",
         issued=date.today(),
-        expires=None,         # perpetual
-        updates_until=None,   # perpetual
+        expires=None,
+        updates_until=None,
         features=ALL_FEATURES.copy(),
     )
