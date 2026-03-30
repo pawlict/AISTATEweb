@@ -350,8 +350,12 @@
 
     var canvas = document.createElement("canvas");
     canvas.className = "seg-map-canvas";
-    canvas.width = 800;
+    // Use actual container width for canvas resolution (fixes long recordings)
+    var mapWidth = parent.offsetWidth || parent.clientWidth || 800;
+    canvas.width = Math.max(800, Math.min(mapWidth * 2, 4000)); // 2x for retina, max 4000
     canvas.height = 64;
+    canvas.style.width = "100%";
+    canvas.style.height = "64px";
     map.appendChild(canvas);
 
     var playhead = document.createElement("div");
@@ -552,12 +556,15 @@
     mapEl.addEventListener("click", function (e) {
       var rect = canvas.getBoundingClientRect();
       var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      var time = pct * totalDur;
+      var player = _player();
+      // Use real audio duration for seek, fallback to totalDur
+      var seekDur = (player && player.audio && player.audio.duration && !isNaN(player.audio.duration) && player.audio.duration > 0)
+        ? player.audio.duration : totalDur;
+      var time = pct * seekDur;
 
       // Stop hover playback first to prevent overlap
       if (CFG && CFG.stopHoverPlayback) CFG.stopHoverPlayback();
 
-      var player = _player();
       if (player && player.audio) {
         player.seekTo(time);
         player.play();
@@ -618,7 +625,10 @@
       _playheadLast = ts;
       var player = _player();
       if (player && player.audio && totalDur > 0) {
-        var pct = (player.audio.currentTime || 0) / totalDur;
+        // Use audio.duration (real file length) if available, fallback to totalDur (segments)
+        var realDur = (player.audio.duration && !isNaN(player.audio.duration) && player.audio.duration > 0)
+          ? player.audio.duration : totalDur;
+        var pct = Math.min(1, Math.max(0, (player.audio.currentTime || 0) / realDur));
         playhead.style.left = (pct * 100) + "%";
         if (player.audio.paused) {
           playhead.style.display = "none";
