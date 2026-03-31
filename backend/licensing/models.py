@@ -7,7 +7,6 @@ from datetime import date
 from typing import Dict, List, Optional
 
 
-# All known features that can be gated
 ALL_FEATURES: List[str] = [
     "transcription",
     "diarization",
@@ -22,26 +21,44 @@ ALL_FEATURES: List[str] = [
     "update_panel",
 ]
 
-# Features available ONLY in the Pro version.
-# This list is served to the Community UI so users can see what Pro offers.
 PRO_ONLY_FEATURES: List[Dict[str, str]] = [
     {
         "key": "video_processing",
         "name_pl": "Przetwarzanie wideo",
         "name_en": "Video processing",
-        "desc_pl": "Transkrypcja i diaryzacja z plik\u00f3w wideo (14 format\u00f3w: MP4, AVI, MKV, MOV, WEBM, WMV, FLV, M4V, MPG, MPEG, 3GP, TS, MTS, VOB)",
+        "desc_pl": "Transkrypcja i diaryzacja z plik\u00f3w wideo (14 format\u00f3w)",
         "desc_en": "Transcription and diarization from video files (14 formats)",
     },
     {
         "key": "audio_enhancement",
         "name_pl": "Poprawa jako\u015bci d\u017awi\u0119ku",
         "name_en": "Audio enhancement",
-        "desc_pl": "Automatyczna normalizacja g\u0142o\u015bno\u015bci, redukcja szumu, analiza jako\u015bci audio (SNR, dBFS, clipping)",
-        "desc_en": "Auto loudness normalization, noise reduction, audio quality analysis (SNR, dBFS, clipping)",
+        "desc_pl": "Normalizacja g\u0142o\u015bno\u015bci, inteligentna redukcja szumu",
+        "desc_en": "Loudness normalization, smart noise reduction",
+    },
+    {
+        "key": "source_separation",
+        "name_pl": "Separacja \u017ar\u00f3de\u0142 d\u017awi\u0119ku",
+        "name_en": "Source separation",
+        "desc_pl": "Izolacja g\u0142os\u00f3w od muzyki i szum\u00f3w t\u0142a (Demucs)",
+        "desc_en": "Isolate vocals from music and background noise (Demucs)",
+    },
+    {
+        "key": "emotion_detection",
+        "name_pl": "Detekcja emocji m\u00f3wcy",
+        "name_en": "Speaker emotion detection",
+        "desc_pl": "Rozpoznawanie emocji w g\u0142osie: z\u0142o\u015b\u0107, strach, rado\u015b\u0107, smutek",
+        "desc_en": "Emotion recognition: anger, fear, happiness, sadness",
+    },
+    {
+        "key": "scene_classification",
+        "name_pl": "Klasyfikacja sceny akustycznej",
+        "name_en": "Acoustic scene classification",
+        "desc_pl": "Rozpoznawanie kontekstu nagrania (biuro, ulica, pojazd, telefon)",
+        "desc_en": "Detect recording context (office, street, vehicle, phone)",
     },
 ]
 
-# Plans and their default feature sets
 PLAN_FEATURES = {
     "community": ALL_FEATURES.copy(),
     "pro": ALL_FEATURES.copy(),
@@ -51,8 +68,6 @@ PLAN_FEATURES = {
 
 @dataclass
 class LicenseInfo:
-    """Parsed and validated license information."""
-
     license_id: str = ""
     name: str = ""
     email: str = ""
@@ -115,7 +130,6 @@ class LicenseInfo:
 
 
 def default_community_license() -> LicenseInfo:
-    """Return a default 'community' license with everything unlocked."""
     return LicenseInfo(
         license_id="COMMUNITY",
         email="",
