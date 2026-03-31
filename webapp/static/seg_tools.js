@@ -419,11 +419,12 @@
 
     // For each peak column, determine which segment it belongs to
     var midY = H / 2;
-    var barW = 1; // 1px per peak column
+    var barW = Math.max(1, W / peaks.length); // Scale bars to fill canvas width
 
     for (var i = 0; i < peaks.length; i++) {
       var t = (i / peaks.length) * duration; // time for this column
       var amp = peaks[i];
+      var x = (i / peaks.length) * W; // X position scaled to canvas width
 
       // Find segment at this time
       var segSpeaker = null;
@@ -447,7 +448,7 @@
         ctx.fillStyle = "rgba(150,150,150,0.25)";
       }
 
-      ctx.fillRect(i * barW, y, barW, barH);
+      ctx.fillRect(x, y, Math.ceil(barW), barH);
     }
 
     // Segment boundary lines
