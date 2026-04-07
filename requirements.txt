@@ -13,9 +13,10 @@ reportlab>=4.0
 
 
 # Web
-fastapi>=0.110
+fastapi==0.135.3
 uvicorn[standard]>=0.27
-jinja2>=3.1
+jinja2==3.1.6
+starlette==0.47.3
 python-multipart>=0.0.9
 
 # --- Analysis tab (Ollama + documents) ---
