@@ -2112,8 +2112,8 @@ def home(request: Request) -> Any:
 
 @app.get("/login", response_class=HTMLResponse)
 def page_login(request: Request) -> Any:
-    return TEMPLATES.TemplateResponse("login.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "login.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
     })
 
@@ -2121,16 +2121,16 @@ def page_login(request: Request) -> Any:
 @app.get("/change-password", response_class=HTMLResponse)
 def page_change_password(request: Request) -> Any:
     """Standalone page for forced password change (first login / expired)."""
-    return TEMPLATES.TemplateResponse("change_password.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "change_password.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
     })
 
 
 @app.get("/setup", response_class=HTMLResponse)
 def page_setup(request: Request) -> Any:
-    return TEMPLATES.TemplateResponse("setup.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "setup.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
     })
 
@@ -2139,8 +2139,8 @@ def page_setup(request: Request) -> Any:
 def page_banned(request: Request) -> Any:
     reason = request.query_params.get("reason", "")
     until = request.query_params.get("until", "")
-    return TEMPLATES.TemplateResponse("banned.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "banned.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
         "reason": reason, "until": until,
     })
@@ -2148,16 +2148,16 @@ def page_banned(request: Request) -> Any:
 
 @app.get("/register", response_class=HTMLResponse)
 def page_register(request: Request) -> Any:
-    return TEMPLATES.TemplateResponse("register.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "register.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
     })
 
 
 @app.get("/pending", response_class=HTMLResponse)
 def page_pending(request: Request) -> Any:
-    return TEMPLATES.TemplateResponse("pending.html", {
-        "request": request, "app_name": APP_NAME, "app_version": APP_VERSION,
+    return TEMPLATES.TemplateResponse(request, "pending.html", context={
+        "app_name": APP_NAME, "app_version": APP_VERSION,
         "static_ts": int(time.time()),
     })
 
@@ -2174,9 +2174,9 @@ def render_page(request: Request, tpl: str, title: str, active: str, current_pro
     user = getattr(request.state, "user", None)
     user_modules = get_user_modules(user.role, user.is_admin, user.admin_roles, user.is_superadmin) if user else []
     resp = TEMPLATES.TemplateResponse(
+        request,
         tpl,
-        {
-            "request": request,
+        context={
             "title": title,
             "active": active,
             "app_name": APP_NAME,
