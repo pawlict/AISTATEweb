@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OSM MBTiles Viewer — Polska</title>
+  <link rel="stylesheet"
+        href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0b1220; color: #e5e7eb;
+                 font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #map { position: absolute; inset: 0; }
+
+    .panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: #e5e7eb;
+      padding: 10px 14px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      font-size: 13px;
+      max-width: 320px;
+    }
+    .panel h1 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+    .panel .sub { opacity: 0.75; font-size: 11.5px; }
+    .panel .row { margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
+    .panel .k { opacity: 0.6; }
+    .attr {
+      position: absolute;
+      bottom: 4px;
+      right: 8px;
+      z-index: 10;
+      font-size: 10.5px;
+      color: #334155;
+      background: rgba(255,255,255,0.85);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .attr a { color: #1e3a8a; text-decoration: none; }
+    .attr a:hover { text-decoration: underline; }
+    .err {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: #7f1d1d;
+      color: #fecaca;
+      padding: 20px 28px;
+      border-radius: 12px;
+      font-size: 14px;
+      max-width: 460px;
+      text-align: center;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel">
+  <h1>OSM MBTiles — Polska</h1>
+  <div class="sub">offline vector map (tilemaker / OpenMapTiles)</div>
+  <div class="row"><span class="k">zoom:</span><span id="meta-zoom">–</span></div>
+  <div class="row"><span class="k">lat/lng:</span><span id="meta-ll">–</span></div>
+  <div class="row"><span class="k">plik:</span><span id="meta-name">–</span></div>
+</div>
+
+<div class="attr">
+  &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+</div>
+
+<div id="err" class="err"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+  function showErr(msg) {
+    const el = document.getElementById('err');
+    el.textContent = msg;
+    el.style.display = 'block';
+    console.error(msg);
+  }
+
+  async function init() {
+    let tilejson;
+    try {
+      const r = await fetch('/tiles/metadata');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      tilejson = await r.json();
+    } catch (e) {
+      showErr('Nie mogę pobrać /tiles/metadata — czy serwer serve.py działa? (' + e + ')');
+      return;
+    }
+
+    document.getElementById('meta-name').textContent = tilejson.name || '—';
+
+    // Default view: center of Poland if mbtiles has no center.
+    const defaultCenter = [19.13, 52.00];
+    const center = (tilejson.center && tilejson.center.length >= 2)
+      ? [tilejson.center[0], tilejson.center[1]]
+      : defaultCenter;
+    const defaultZoom = (tilejson.center && tilejson.center.length >= 3)
+      ? tilejson.center[2]
+      : 6;
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: '/style.json',
+      center: center,
+      zoom: defaultZoom,
+      minZoom: tilejson.minzoom ?? 0,
+      maxZoom: tilejson.maxzoom ?? 14,
+      hash: true,
+      attributionControl: false,
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+
+    map.on('error', (e) => {
+      console.warn('map error', e && e.error);
+    });
+
+    map.on('move', () => {
+      const c = map.getCenter();
+      document.getElementById('meta-zoom').textContent = map.getZoom().toFixed(2);
+      document.getElementById('meta-ll').textContent =
+        c.lat.toFixed(4) + ', ' + c.lng.toFixed(4);
+    });
+    // initial update
+    const c = map.getCenter();
+    document.getElementById('meta-zoom').textContent = map.getZoom().toFixed(2);
+    document.getElementById('meta-ll').textContent =
+      c.lat.toFixed(4) + ', ' + c.lng.toFixed(4);
+  }
+
+  init();
+</script>
+
+</body>
+</html>
