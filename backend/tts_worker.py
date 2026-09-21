@@ -245,12 +245,64 @@ def install_engine_deps(engine: str) -> bool:
 # MODEL DOWNLOAD / CACHE
 # ---------------------------------------------------------------------------
 
+# Repository revisions tried when downloading a voice, in order. Voices added
+# after the v1.0.0 tag (e.g. pl_PL-bass-high) exist only on main.
+PIPER_REVISIONS = ("main", "v1.0.0")
+PIPER_CATALOG_URL = "https://huggingface.co/rhasspy/piper-voices/raw/main/voices.json"
+PIPER_CATALOG_MAX_AGE = 7 * 24 * 3600
+
+
+def _piper_catalog() -> dict:
+    """Return the voices.json catalog, cached locally. {} when unreachable."""
+    import json
+    import time
+    import urllib.request
+
+    cache = CACHE_DIR / "piper_voices" / "voices.json"
+    if cache.exists() and (time.time() - cache.stat().st_mtime) < PIPER_CATALOG_MAX_AGE:
+        try:
+            return json.loads(cache.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    try:
+        with urllib.request.urlopen(PIPER_CATALOG_URL, timeout=30) as resp:
+            raw = resp.read().decode("utf-8")
+        data = json.loads(raw)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(raw, encoding="utf-8")
+        return data
+    except Exception as exc:
+        _log(f"Voice catalog unavailable ({exc}); falling back to path guessing")
+        if cache.exists():
+            try:
+                return json.loads(cache.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+
 def _piper_voice_url(voice_id: str) -> tuple[str, str]:
     """Build HuggingFace download URLs for a Piper voice.
 
     Voice ID format: {locale}-{name}-{quality}  e.g. pl_PL-gosia-medium
     Quality can be: x_low, low, medium, high
-    Returns (onnx_url, json_url).
+    Returns (onnx_url, json_url) for the first candidate revision.
+    """
+    return _piper_voice_urls(voice_id)[0]
+
+
+def _piper_voice_candidates(voice_id: str) -> list[tuple[str, str]]:
+    """Alias kept for readability at call sites."""
+    return _piper_voice_urls(voice_id)
+
+
+def _piper_voice_urls(voice_id: str) -> list[tuple[str, str]]:
+    """All (onnx_url, json_url) candidates for a voice, best guess first.
+
+    The relative path comes from the catalog when available; otherwise it is
+    derived from the voice id. Each path is tried on every known revision,
+    because the v1.0.0 tag misses voices added later.
     """
     QUALITIES = ("x_low", "low", "medium", "high")
 
@@ -269,12 +321,26 @@ def _piper_voice_url(voice_id: str) -> tuple[str, str]:
             break
 
     lang_short = locale.split("_")[0]           # "pl"
+    rel = f"{lang_short}/{locale}/{name}/{quality}/{voice_id}"
 
-    base = (
-        f"https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
-        f"{lang_short}/{locale}/{name}/{quality}/{voice_id}"
-    )
-    return f"{base}.onnx", f"{base}.onnx.json"
+    # Prefer the path the catalog reports - it is authoritative.
+    entry = _piper_catalog().get(voice_id) or {}
+    for f in entry.get("files", {}):
+        if f.endswith(".onnx"):
+            rel = f[: -len(".onnx")]
+            break
+
+    out = []
+    for rev in PIPER_REVISIONS:
+        base = f"https://huggingface.co/rhasspy/piper-voices/resolve/{rev}/{rel}"
+        out.append((f"{base}.onnx", f"{base}.onnx.json"))
+    return out
+
+
+def _piper_voices_for_locale(voice_id: str) -> list[str]:
+    """Voice ids from the catalog sharing the locale of voice_id."""
+    locale = voice_id.split("-")[0]
+    return sorted(v for v in _piper_catalog() if v.startswith(locale + "-"))
 
 
 def _piper_voice_path(voice_id: str) -> Path:
@@ -301,22 +367,34 @@ def predownload_piper(voice: str = "") -> bool:
         onnx_path = voices_dir / f"{voice_id}.onnx"
         json_path = voices_dir / f"{voice_id}.onnx.json"
 
-        onnx_url, json_url = _piper_voice_url(voice_id)
+        candidates = _piper_voice_candidates(voice_id)
+        json_url = candidates[0][1]
 
-        # Download .onnx model
+        # Download .onnx model - a voice may live on any of the revisions
         if onnx_path.exists():
             _log(f"Model file already exists: {onnx_path.name}")
         else:
             _progress(10)
-            _log(f"Downloading: {onnx_url}")
             _log("This may take a moment (~15-60 MB)...")
             tmp = onnx_path.with_suffix(".onnx.tmp")
-            try:
-                urllib.request.urlretrieve(onnx_url, str(tmp))
-                tmp.rename(onnx_path)
-            except Exception:
-                tmp.unlink(missing_ok=True)
-                raise
+            last_err: Exception | None = None
+            for onnx_url, cfg_url in candidates:
+                _log(f"Downloading: {onnx_url}")
+                try:
+                    urllib.request.urlretrieve(onnx_url, str(tmp))
+                    tmp.rename(onnx_path)
+                    json_url = cfg_url
+                    last_err = None
+                    break
+                except Exception as exc:
+                    tmp.unlink(missing_ok=True)
+                    last_err = exc
+                    _log(f"Not available here: {exc}")
+            if last_err is not None:
+                known = _piper_voices_for_locale(voice_id)
+                if known:
+                    _log(f"Voices available for this language: {', '.join(known)}")
+                raise last_err
             _log(f"Downloaded: {onnx_path.name} ({onnx_path.stat().st_size // 1024} KB)")
 
         # Download .onnx.json config
